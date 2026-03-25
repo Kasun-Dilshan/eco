@@ -1604,7 +1604,7 @@ $recentApplications = $stmt->fetchAll();
                         if ($application['status'] === 'in_progress') $statusClass = 'status-in-progress';
                         ?>
                         <tr>
-                            <td><strong>EWF-<?php echo str_pad($application['id'], 6, '0', STR_PAD_LEFT); ?></strong></td>
+                            <td><strong><?php echo str_pad($application['id'], 6, '0', STR_PAD_LEFT); ?></strong></td>
                             <td><?php echo htmlspecialchars($application['full_name']); ?></td>
                             <td>
                                 <a href="mailto:<?php echo htmlspecialchars($application['email']); ?>" 

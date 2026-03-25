@@ -316,7 +316,7 @@ try {
                     <tbody>
                         <?php foreach ($recent_applications as $app): ?>
                         <tr>
-                            <td><strong>EWF-<?php echo str_pad($app['id'], 6, '0', STR_PAD_LEFT); ?></strong></td>
+                            <td><strong><?php echo str_pad($app['id'], 6, '0', STR_PAD_LEFT); ?></strong></td>
                             <td><?php echo htmlspecialchars($app['full_name']); ?></td>
                             <td><?php echo $app['formatted_created']; ?></td>
                             <td>

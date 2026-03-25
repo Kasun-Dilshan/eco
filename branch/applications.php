@@ -311,7 +311,7 @@ try {
                     <tbody>
                         <?php foreach ($applications as $app): ?>
                         <tr>
-                            <td><strong>EWF-<?php echo str_pad($app['id'], 6, '0', STR_PAD_LEFT); ?></strong></td>
+                            <td><strong><?php echo str_pad($app['id'], 6, '0', STR_PAD_LEFT); ?></strong></td>
                             <td><?php echo htmlspecialchars($app['full_name']); ?></td>
                             <td><?php echo htmlspecialchars($app['nic_no']); ?></td>
                             <td><?php echo htmlspecialchars($app['email']); ?></td>

@@ -932,7 +932,7 @@ function getInvestmentTypeName($type) {
             <h1><i class="fas fa-file-contract"></i> Generate Investment Agreement</h1>
             <p>Create a legal agreement for investor: <strong><?php echo htmlspecialchars($investor['full_name']); ?></strong></p>
             <p style="margin-top: 10px; font-size: 14px; opacity: 0.8;">
-                Application ID: <strong>EWF-<?php echo str_pad($applicationId, 6, '0', STR_PAD_LEFT); ?></strong>
+                Application ID: <strong><?php echo str_pad($applicationId, 6, '0', STR_PAD_LEFT); ?></strong>
             </p>
         </div>
         

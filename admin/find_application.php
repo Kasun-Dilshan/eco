@@ -52,7 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generate_agreement'])
             
             if ($investor) {
                 // Generate agreement number
-                $agreementNumber = 'EWF-' . date('Y') . '-' . str_pad($investorId, 6, '0', STR_PAD_LEFT) . '-' . rand(1000, 9999);
+                $agreementNumber = date('Y') . '-' . str_pad($investorId, 6, '0', STR_PAD_LEFT) . '-' . rand(1000, 9999);
                 
                 // Insert new agreement
                 $stmt = $db->prepare("

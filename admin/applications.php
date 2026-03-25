@@ -76,7 +76,7 @@ if (isset($_GET['delete_id']) && is_numeric($_GET['delete_id'])) {
         $stmt = $db->prepare("DELETE FROM investors WHERE id = ?");
         $stmt->execute([$delete_id]);
         
-        $_SESSION['delete_success'] = "Application #EWF-" . str_pad($delete_id, 6, '0', STR_PAD_LEFT) . " has been deleted successfully.";
+        $_SESSION['delete_success'] = "Application #" . str_pad($delete_id, 6, '0', STR_PAD_LEFT) . " has been deleted successfully.";
         
         // Redirect to avoid resubmission
         header("Location: applications.php");
@@ -794,7 +794,7 @@ $applications = $stmt->fetchAll();
                                     }
                                     ?>
                                     <tr>
-                                        <td>EWF-<?php echo str_pad($app['id'], 6, '0', STR_PAD_LEFT); ?></td>
+                                        <td><?php echo str_pad($app['id'], 6, '0', STR_PAD_LEFT); ?></td>
                                         <td>
                                             <strong><?php echo htmlspecialchars($app['full_name']); ?></strong><br>
                                             <small><?php echo htmlspecialchars($app['nic_no']); ?></small>
@@ -944,7 +944,7 @@ $applications = $stmt->fetchAll();
         // Delete Functions
         function confirmDelete(id, name) {
             applicationToDelete = id;
-            const appId = 'EWF-' + String(id).padStart(6, '0');
+            const appId = String(id).padStart(6, '0');
             document.getElementById('deleteMessage').innerHTML = 
                 `Are you sure you want to delete the application <strong>${appId}</strong> for <strong>${name}</strong>?<br><br>
                  This will permanently delete:<br>

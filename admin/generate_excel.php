@@ -56,12 +56,12 @@ try {
     </head>
     <body>
         <h1>ECO WEALTH FINANCE - APPLICATION SUMMARY</h1>
-        <h2>Application ID: EWF-' . str_pad($applicationId, 6, '0', STR_PAD_LEFT) . '</h2>
+        <h2>Application ID: ' . str_pad($applicationId, 6, '0', STR_PAD_LEFT) . '</h2>
         
         <div class="section-title">Application Information</div>
         <table>
             <tr><th>Field</th><th>Value</th></tr>
-            <tr><td>Application ID</td><td>EWF-' . str_pad($applicationId, 6, '0', STR_PAD_LEFT) . '</td></tr>
+            <tr><td>Application ID</td><td>' . str_pad($applicationId, 6, '0', STR_PAD_LEFT) . '</td></tr>
             <tr><td>Status</td><td>' . ucfirst($application['status']) . '</td></tr>
             <tr><td>Submission Date</td><td>' . $application['formatted_created'] . '</td></tr>
             <tr><td>Generated Date</td><td>' . date('F d, Y H:i:s') . '</td></tr>

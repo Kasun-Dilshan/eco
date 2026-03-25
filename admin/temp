@@ -291,7 +291,7 @@ function sendApproverNotification($applicationId, $nextApproverLevel, $db) {
     ];
     
     $to = $approverEmails[$nextApproverLevel] ?? ADMIN_EMAIL;
-    $subject = "EcoWealth - Application #EWF-" . str_pad($applicationId, 6, '0', STR_PAD_LEFT) . " Requires Your Approval";
+    $subject = "EcoWealth - Application #" . str_pad($applicationId, 6, '0', STR_PAD_LEFT) . " Requires Your Approval";
     
     $message = "
     <html>
@@ -310,7 +310,7 @@ function sendApproverNotification($applicationId, $nextApproverLevel, $db) {
         </div>
         <div class='content'>
             <h3>Application Approval Request</h3>
-            <p><strong>Application ID:</strong> EWF-" . str_pad($applicationId, 6, '0', STR_PAD_LEFT) . "</p>
+            <p><strong>Application ID:</strong> " . str_pad($applicationId, 6, '0', STR_PAD_LEFT) . "</p>
             <p><strong>Investor:</strong> " . htmlspecialchars($appDetails['full_name']) . "</p>
             <p><strong>NIC:</strong> " . htmlspecialchars($appDetails['nic_no']) . "</p>
             <p><strong>Current Status:</strong> Pending Level $nextApproverLevel Approval</p>
@@ -2159,7 +2159,7 @@ function sendApproverNotification($applicationId, $nextApproverLevel, $db) {
             <!-- Application Header -->
             <div class="application-header animate-in">
                 <div class="application-id">
-                    <span>Application #EWF-<?php echo str_pad($applicationId, 6, '0', STR_PAD_LEFT); ?></span>
+                    <span>Application #<?php echo str_pad($applicationId, 6, '0', STR_PAD_LEFT); ?></span>
                     <span class="application-status <?php echo $application['status']; ?>">
                         <span class="status-indicator <?php echo $application['status']; ?>"></span>
                         <?php echo ucfirst($application['status']); ?>

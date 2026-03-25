@@ -310,7 +310,7 @@ try {
                             <?php foreach ($applications as $app): ?>
                             <tr>
                                 <td data-label="Application ID">
-                                    <strong>EWF-<?php echo str_pad($app['id'], 6, '0', STR_PAD_LEFT); ?></strong>
+                                    <strong><?php echo str_pad($app['id'], 6, '0', STR_PAD_LEFT); ?></strong>
                                 </td>
                                 <td data-label="Investor Name"><?php echo htmlspecialchars($app['full_name']); ?></td>
                                 <td data-label="NIC No"><?php echo htmlspecialchars($app['nic_no']); ?></td>

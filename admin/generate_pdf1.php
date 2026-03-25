@@ -140,7 +140,7 @@ function generatePDFContent($application, $beneficiaries) {
         </div>
         
         <div class="application-id">
-            <strong>Application ID:</strong> EWF-' . str_pad($application['id'], 6, '0', STR_PAD_LEFT) . '<br>
+            <strong>Application ID:</strong> ' . str_pad($application['id'], 6, '0', STR_PAD_LEFT) . '<br>
             <strong>Status:</strong> ' . ucfirst($application['status']) . '<br>
             <strong>Generated:</strong> ' . date('F d, Y H:i:s') . '
         </div>
@@ -214,7 +214,7 @@ function generatePDFContent($application, $beneficiaries) {
 function generateExcelContent($application, $beneficiaries) {
     // Create simple CSV format for Excel
     $csv = "ECO WEALTH FINANCE - APPLICATION SUMMARY\n";
-    $csv .= "Application ID,EWF-" . str_pad($application['id'], 6, '0', STR_PAD_LEFT) . "\n";
+    $csv .= "Application ID," . str_pad($application['id'], 6, '0', STR_PAD_LEFT) . "\n";
     $csv .= "Status," . ucfirst($application['status']) . "\n";
     $csv .= "Generated," . date('Y-m-d H:i:s') . "\n\n";
     
@@ -257,7 +257,7 @@ function generateReadmeContent($application, $beneficiaries) {
     $content .= "==========================================\n\n";
     $content .= "APPLICATION DETAILS\n";
     $content .= "-------------------\n";
-    $content .= "Application ID: EWF-" . str_pad($application['id'], 6, '0', STR_PAD_LEFT) . "\n";
+    $content .= "Application ID: " . str_pad($application['id'], 6, '0', STR_PAD_LEFT) . "\n";
     $content .= "Investor Name: " . $application['full_name'] . "\n";
     $content .= "NIC No: " . $application['nic_no'] . "\n";
     $content .= "Email: " . $application['email'] . "\n";

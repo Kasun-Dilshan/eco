@@ -2261,7 +2261,7 @@ try {
             <!-- Application Header -->
             <div class="application-header animate-in">
                 <div class="application-id">
-                    <span>Application #EWF-<?php echo str_pad($applicationId, 6, '0', STR_PAD_LEFT); ?></span>
+                    <span>Application #<?php echo str_pad($applicationId, 6, '0', STR_PAD_LEFT); ?></span>
                     <span class="application-status <?php echo $application['status']; ?>">
                         <span class="status-indicator <?php echo $application['status']; ?>"></span>
                         <?php echo ucfirst($application['status']); ?>
@@ -3372,7 +3372,7 @@ function setAction(action) {
         
         // Copy application data
         function copyApplicationData() {
-            const data = `Application #EWF-<?php echo str_pad($applicationId, 6, '0', STR_PAD_LEFT); ?>
+            const data = `Application #<?php echo str_pad($applicationId, 6, '0', STR_PAD_LEFT); ?>
 Name: <?php echo $application['full_name']; ?>
 NIC: <?php echo $application['nic_no']; ?>
 Email: <?php echo $application['email']; ?>

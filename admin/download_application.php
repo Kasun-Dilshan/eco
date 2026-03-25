@@ -59,7 +59,7 @@ try {
             // Add application details as text file
             $details = "Application Details\n";
             $details .= "===================\n\n";
-            $details .= "Application ID: EWF-" . str_pad($applicationId, 6, '0', STR_PAD_LEFT) . "\n";
+            $details .= "Application ID: " . str_pad($applicationId, 6, '0', STR_PAD_LEFT) . "\n";
             $details .= "Full Name: " . $application['full_name'] . "\n";
             $details .= "NIC No: " . $application['nic_no'] . "\n";
             $details .= "Email: " . $application['email'] . "\n";

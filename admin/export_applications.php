@@ -92,7 +92,7 @@ try {
     // Add data rows
     foreach ($applications as $app) {
         $row = [
-            'EWF-' . str_pad($app['id'], 6, '0', STR_PAD_LEFT),
+            str_pad($app['id'], 6, '0', STR_PAD_LEFT),
             $app['full_name'],
             $app['name_with_initials'],
             $app['nic_no'],

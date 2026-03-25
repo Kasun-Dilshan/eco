@@ -68,7 +68,7 @@ try {
     $updateStmt->execute([$status, $approver, $status, $id]);
 
     $planCode = strtoupper(trim((string)($application['investment_type'] ?? '')));
-    $applicationRef = 'EWF-' . ($planCode !== '' ? ($planCode . '-') : '') . str_pad($id, 6, '0', STR_PAD_LEFT);
+    $applicationRef = ($planCode !== '' ? ($planCode . '-') : '') . str_pad($id, 6, '0', STR_PAD_LEFT);
     
     // Log the status change
     $logStmt = $db->prepare("

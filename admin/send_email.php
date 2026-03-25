@@ -46,7 +46,7 @@ $success = '';
 function buildApplicationRef($applicationId, $investmentType) {
     $planCode = strtoupper(trim((string)($investmentType ?? '')));
     $planCodeSegment = $planCode !== '' ? ($planCode . '-') : '';
-    return 'EWF-' . $planCodeSegment . str_pad((int)$applicationId, 6, '0', STR_PAD_LEFT);
+    return $planCodeSegment . str_pad((int)$applicationId, 6, '0', STR_PAD_LEFT);
 }
 
 // Handle email sending
@@ -668,7 +668,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Replace template variables with sample data
             let previewBody = body
                 .replace(/{full_name}/g, 'John Doe')
-                .replace(/{application_id}/g, 'EWF-HPP-000001')
+                .replace(/{application_id}/g, 'HPP-000001')
                 .replace(/{nic_no}/g, '123456789V')
                 .replace(/{email}/g, 'john@example.com')
                 .replace(/{phone}/g, '+94 77 123 4567')

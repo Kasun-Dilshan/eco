@@ -25566,3 +25566,239 @@
 
 2026-03-25 14:04:04 - Tables created successfully
 2026-03-25 14:17:01 - Tables created successfully
+2026-03-25 15:22:34 - Tables created successfully
+2026-03-25 15:24:45 - Tables created successfully
+2026-03-25 15:24:45 - Form submission started - Array
+(
+    [declarationDate] => 2026-03-25
+    [fullName] => HESANTHI
+    [nameWithInitials] => I HESANTHI
+    [nicNo] => 200130488732
+    [telNo] => 0712311231
+    [dob] => 2008-03-04
+    [email] => hesa@gmail.com
+    [address] => kalawana ratnapura
+    [occupation] => Assistat agree
+    [employerName] => serendib group
+    [beneficiaryName] => Array
+        (
+            [0] => kasun
+        )
+
+    [beneficiaryNIC] => Array
+        (
+            [0] => 200130400384
+        )
+
+    [beneficiaryPercentage] => Array
+        (
+            [0] => 100
+        )
+
+    [years] => 2
+    [investmentAmount] => 400000
+    [investmentType] => HPP
+    [signingDate] => 2026-03-25
+    [accountNo] => 09987123
+    [bank] => Peoples bank
+    [branch] => kalawana
+    [declaration] => accepted
+)
+
+2026-03-25 15:24:45 - Files received - Array
+(
+    [investorId] => Array
+        (
+            [name] => 641598410_891433937005695_1503128446691920866_n.jpg
+            [type] => image/jpeg
+            [tmp_name] => C:\xampp\tmp\phpC965.tmp
+            [error] => 0
+            [size] => 52086
+        )
+
+    [beneficiaryId] => Array
+        (
+            [name] => travel and tourse.jpg
+            [type] => image/jpeg
+            [tmp_name] => C:\xampp\tmp\phpC966.tmp
+            [error] => 0
+            [size] => 371800
+        )
+
+    [passbook] => Array
+        (
+            [name] => Builders.jpg
+            [type] => image/jpeg
+            [tmp_name] => C:\xampp\tmp\phpC977.tmp
+            [error] => 0
+            [size] => 1151034
+        )
+
+    [paymentSlip] => Array
+        (
+            [name] => s2.PNG
+            [type] => image/png
+            [tmp_name] => C:\xampp\tmp\phpC997.tmp
+            [error] => 0
+            [size] => 662963
+        )
+
+    [proofDocuments] => Array
+        (
+            [name] => ssq.PNG
+            [type] => image/png
+            [tmp_name] => C:\xampp\tmp\phpC998.tmp
+            [error] => 0
+            [size] => 33146
+        )
+
+    [otherDocuments] => Array
+        (
+            [name] => plantation.jpg
+            [type] => image/jpeg
+            [tmp_name] => C:\xampp\tmp\phpC999.tmp
+            [error] => 0
+            [size] => 348529
+        )
+
+)
+
+2026-03-25 15:24:45 - POST request received
+2026-03-25 15:24:45 - Processing form data - Array
+(
+    [declarationDate] => 2026-03-25
+    [fullName] => HESANTHI
+    [nameWithInitials] => I HESANTHI
+    [nicNo] => 200130488732
+    [telNo] => 0712311231
+    [dob] => 2008-03-04
+    [email] => hesa@gmail.com
+    [address] => kalawana ratnapura
+    [occupation] => Assistat agree
+    [employerName] => serendib group
+    [beneficiaryName] => Array
+        (
+            [0] => kasun
+        )
+
+    [beneficiaryNIC] => Array
+        (
+            [0] => 200130400384
+        )
+
+    [beneficiaryPercentage] => Array
+        (
+            [0] => 100
+        )
+
+    [years] => 2
+    [investmentAmount] => 400000
+    [investmentType] => HPP
+    [signingDate] => 2026-03-25
+    [accountNo] => 09987123
+    [bank] => Peoples bank
+    [branch] => kalawana
+    [declaration] => accepted
+)
+
+2026-03-25 15:24:45 - Attempting to upload file - Array
+(
+    [source] => C:\xampp\tmp\phpC965.tmp
+    [destination] => C:\xampp\htdocs\eco-wealth-portal/uploads/69c3b0e5e8d36_1774432485_641598410_891433937005695_1503128446691920866_n.jpg
+    [file_size] => 52086
+)
+
+2026-03-25 15:24:45 - File uploaded successfully - 69c3b0e5e8d36_1774432485_641598410_891433937005695_1503128446691920866_n.jpg
+2026-03-25 15:24:45 - Attempting to upload file - Array
+(
+    [source] => C:\xampp\tmp\phpC966.tmp
+    [destination] => C:\xampp\htdocs\eco-wealth-portal/uploads/69c3b0e5ea5d1_1774432485_travel_and_tourse.jpg
+    [file_size] => 371800
+)
+
+2026-03-25 15:24:45 - File uploaded successfully - 69c3b0e5ea5d1_1774432485_travel_and_tourse.jpg
+2026-03-25 15:24:45 - Attempting to upload file - Array
+(
+    [source] => C:\xampp\tmp\phpC977.tmp
+    [destination] => C:\xampp\htdocs\eco-wealth-portal/uploads/69c3b0e5ea9e3_1774432485_Builders.jpg
+    [file_size] => 1151034
+)
+
+2026-03-25 15:24:45 - File uploaded successfully - 69c3b0e5ea9e3_1774432485_Builders.jpg
+2026-03-25 15:24:45 - Attempting to upload file - Array
+(
+    [source] => C:\xampp\tmp\phpC997.tmp
+    [destination] => C:\xampp\htdocs\eco-wealth-portal/uploads/69c3b0e5ead12_1774432485_s2.PNG
+    [file_size] => 662963
+)
+
+2026-03-25 15:24:45 - File uploaded successfully - 69c3b0e5ead12_1774432485_s2.PNG
+2026-03-25 15:24:45 - Attempting to upload file - Array
+(
+    [source] => C:\xampp\tmp\phpC998.tmp
+    [destination] => C:\xampp\htdocs\eco-wealth-portal/uploads/69c3b0e5eb095_1774432485_ssq.PNG
+    [file_size] => 33146
+)
+
+2026-03-25 15:24:45 - File uploaded successfully - 69c3b0e5eb095_1774432485_ssq.PNG
+2026-03-25 15:24:45 - Attempting to upload file - Array
+(
+    [source] => C:\xampp\tmp\phpC999.tmp
+    [destination] => C:\xampp\htdocs\eco-wealth-portal/uploads/69c3b0e5eb39c_1774432485_plantation.jpg
+    [file_size] => 348529
+)
+
+2026-03-25 15:24:45 - File uploaded successfully - 69c3b0e5eb39c_1774432485_plantation.jpg
+2026-03-25 15:24:46 - Investor inserted successfully - Array
+(
+    [id] => 38
+)
+
+2026-03-25 15:24:46 - Beneficiary inserted - Array
+(
+    [investor_id] => 38
+    [name] => kasun
+)
+
+2026-03-25 15:24:46 - Transaction committed successfully - Array
+(
+    [application_id] => 38
+)
+
+2026-03-25 15:24:48 - Email sending attempt - Array
+(
+    [sent] => 
+    [to] => hesa@gmail.com
+)
+
+2026-03-25 15:24:48 - Redirecting to submit.php - Array
+(
+    [application_id] => 38
+)
+
+2026-03-25 15:24:48 - Tables created successfully
+2026-03-25 15:25:14 - Tables created successfully
+2026-03-25 15:25:16 - Tables created successfully
+2026-03-25 15:25:17 - Tables created successfully
+2026-03-25 15:25:17 - Tables created successfully
+2026-03-25 15:25:24 - Tables created successfully
+2026-03-25 15:25:24 - Tables created successfully
+2026-03-25 15:25:36 - Tables created successfully
+2026-03-25 15:25:46 - Tables created successfully
+2026-03-25 15:25:46 - Tables created successfully
+2026-03-25 15:25:46 - Tables created successfully
+2026-03-25 15:25:50 - Tables created successfully
+2026-03-25 15:25:52 - Tables created successfully
+2026-03-25 15:25:52 - Tables created successfully
+2026-03-25 15:25:52 - Tables created successfully
+2026-03-25 15:25:53 - Tables created successfully
+2026-03-25 15:25:56 - Tables created successfully
+2026-03-25 15:25:58 - Tables created successfully
+2026-03-25 15:26:05 - Tables created successfully
+2026-03-25 15:26:06 - Tables created successfully
+2026-03-25 15:26:10 - Tables created successfully
+2026-03-25 15:26:11 - Tables created successfully
+2026-03-25 15:26:15 - Tables created successfully
+2026-03-25 15:26:43 - Tables created successfully
+2026-03-25 15:26:49 - Tables created successfully
+2026-03-25 15:26:54 - Tables created successfully

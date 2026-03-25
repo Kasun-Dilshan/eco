@@ -823,7 +823,7 @@ try {
         <!-- User Header -->
         <div class="user-header">
             <div class="user-id">
-                <span>ID: EWF-<?php echo str_pad($userId, 6, '0', STR_PAD_LEFT); ?></span>
+                <span>ID: <?php echo str_pad($userId, 6, '0', STR_PAD_LEFT); ?></span>
                 <span class="user-status status-<?php echo $user['status']; ?>">
                     <?php echo ucfirst($user['status']); ?>
                 </span>
