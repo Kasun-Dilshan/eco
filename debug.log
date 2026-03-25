@@ -25802,3 +25802,215 @@
 2026-03-25 15:26:43 - Tables created successfully
 2026-03-25 15:26:49 - Tables created successfully
 2026-03-25 15:26:54 - Tables created successfully
+2026-03-25 15:33:54 - Tables created successfully
+2026-03-25 15:38:12 - Tables created successfully
+2026-03-25 15:39:56 - Tables created successfully
+2026-03-25 15:39:56 - Form submission started - Array
+(
+    [declarationDate] => 2026-03-25
+    [fullName] => UMESH
+    [nameWithInitials] => SENADEERA
+    [nicNo] => 987761130V
+    [telNo] => 08711121231
+    [dob] => 2008-02-24
+    [email] => kala@gmail.com
+    [address] => helaksa
+    [occupation] => ff
+    [employerName] => fff
+    [beneficiaryName] => Array
+        (
+            [0] => f
+        )
+
+    [beneficiaryNIC] => Array
+        (
+            [0] => ff
+        )
+
+    [beneficiaryPercentage] => Array
+        (
+            [0] => 100
+        )
+
+    [years] => 4
+    [investmentAmount] => 20000000
+    [investmentType] => GOLD
+    [signingDate] => 2026-03-25
+    [accountNo] => 21
+    [bank] => 2e2
+    [branch] => ewqd
+    [declaration] => accepted
+)
+
+2026-03-25 15:39:56 - Files received - Array
+(
+    [investorId] => Array
+        (
+            [name] => WhatsApp Image 2026-03-21 at 10.04.30 AM.jpeg
+            [type] => image/jpeg
+            [tmp_name] => C:\xampp\tmp\phpAE5E.tmp
+            [error] => 0
+            [size] => 124311
+        )
+
+    [beneficiaryId] => Array
+        (
+            [name] => images.png
+            [type] => image/png
+            [tmp_name] => C:\xampp\tmp\phpAE5F.tmp
+            [error] => 0
+            [size] => 6747
+        )
+
+    [passbook] => Array
+        (
+            [name] => a12.png
+            [type] => image/png
+            [tmp_name] => C:\xampp\tmp\phpAE60.tmp
+            [error] => 0
+            [size] => 53183
+        )
+
+    [paymentSlip] => Array
+        (
+            [name] => Black Gold Decorative Grand Opening Invitation.png
+            [type] => image/png
+            [tmp_name] => C:\xampp\tmp\phpAE70.tmp
+            [error] => 0
+            [size] => 752972
+        )
+
+    [proofDocuments] => Array
+        (
+            [name] => WhatsApp Image 2026-03-17 at 1.12.47 PM.jpeg
+            [type] => image/jpeg
+            [tmp_name] => C:\xampp\tmp\phpAE81.tmp
+            [error] => 0
+            [size] => 268288
+        )
+
+    [otherDocuments] => Array
+        (
+            [name] => WhatsApp Image 2026-03-12 at 11.09.38 AM.jpeg
+            [type] => image/jpeg
+            [tmp_name] => C:\xampp\tmp\phpAE82.tmp
+            [error] => 0
+            [size] => 97563
+        )
+
+)
+
+2026-03-25 15:39:56 - POST request received
+2026-03-25 15:39:56 - Processing form data - Array
+(
+    [declarationDate] => 2026-03-25
+    [fullName] => UMESH
+    [nameWithInitials] => SENADEERA
+    [nicNo] => 987761130V
+    [telNo] => 08711121231
+    [dob] => 2008-02-24
+    [email] => kala@gmail.com
+    [address] => helaksa
+    [occupation] => ff
+    [employerName] => fff
+    [beneficiaryName] => Array
+        (
+            [0] => f
+        )
+
+    [beneficiaryNIC] => Array
+        (
+            [0] => ff
+        )
+
+    [beneficiaryPercentage] => Array
+        (
+            [0] => 100
+        )
+
+    [years] => 4
+    [investmentAmount] => 20000000
+    [investmentType] => GOLD
+    [signingDate] => 2026-03-25
+    [accountNo] => 21
+    [bank] => 2e2
+    [branch] => ewqd
+    [declaration] => accepted
+)
+
+2026-03-25 15:39:56 - Attempting to upload file - Array
+(
+    [source] => C:\xampp\tmp\phpAE5E.tmp
+    [destination] => C:\xampp\htdocs\eco-wealth-portal/uploads/69c3b4749e18d_1774433396_WhatsApp_Image_2026_03_21_at_10.04.30_AM.jpeg
+    [file_size] => 124311
+)
+
+2026-03-25 15:39:56 - File uploaded successfully - 69c3b4749e18d_1774433396_WhatsApp_Image_2026_03_21_at_10.04.30_AM.jpeg
+2026-03-25 15:39:56 - Attempting to upload file - Array
+(
+    [source] => C:\xampp\tmp\phpAE5F.tmp
+    [destination] => C:\xampp\htdocs\eco-wealth-portal/uploads/69c3b474a32a5_1774433396_images.png
+    [file_size] => 6747
+)
+
+2026-03-25 15:39:56 - File uploaded successfully - 69c3b474a32a5_1774433396_images.png
+2026-03-25 15:39:56 - Attempting to upload file - Array
+(
+    [source] => C:\xampp\tmp\phpAE60.tmp
+    [destination] => C:\xampp\htdocs\eco-wealth-portal/uploads/69c3b474a36fe_1774433396_a12.png
+    [file_size] => 53183
+)
+
+2026-03-25 15:39:56 - File uploaded successfully - 69c3b474a36fe_1774433396_a12.png
+2026-03-25 15:39:56 - Attempting to upload file - Array
+(
+    [source] => C:\xampp\tmp\phpAE70.tmp
+    [destination] => C:\xampp\htdocs\eco-wealth-portal/uploads/69c3b474a3b2b_1774433396_Black_Gold_Decorative_Grand_Opening_Invitation.png
+    [file_size] => 752972
+)
+
+2026-03-25 15:39:56 - File uploaded successfully - 69c3b474a3b2b_1774433396_Black_Gold_Decorative_Grand_Opening_Invitation.png
+2026-03-25 15:39:56 - Attempting to upload file - Array
+(
+    [source] => C:\xampp\tmp\phpAE81.tmp
+    [destination] => C:\xampp\htdocs\eco-wealth-portal/uploads/69c3b474a4119_1774433396_WhatsApp_Image_2026_03_17_at_1.12.47_PM.jpeg
+    [file_size] => 268288
+)
+
+2026-03-25 15:39:56 - File uploaded successfully - 69c3b474a4119_1774433396_WhatsApp_Image_2026_03_17_at_1.12.47_PM.jpeg
+2026-03-25 15:39:56 - Attempting to upload file - Array
+(
+    [source] => C:\xampp\tmp\phpAE82.tmp
+    [destination] => C:\xampp\htdocs\eco-wealth-portal/uploads/69c3b474a4605_1774433396_WhatsApp_Image_2026_03_12_at_11.09.38_AM.jpeg
+    [file_size] => 97563
+)
+
+2026-03-25 15:39:56 - File uploaded successfully - 69c3b474a4605_1774433396_WhatsApp_Image_2026_03_12_at_11.09.38_AM.jpeg
+2026-03-25 15:39:56 - Investor inserted successfully - Array
+(
+    [id] => 39
+)
+
+2026-03-25 15:39:56 - Beneficiary inserted - Array
+(
+    [investor_id] => 39
+    [name] => f
+)
+
+2026-03-25 15:39:56 - Transaction committed successfully - Array
+(
+    [application_id] => 39
+)
+
+2026-03-25 15:39:58 - Email sending attempt - Array
+(
+    [sent] => 
+    [to] => kala@gmail.com
+)
+
+2026-03-25 15:39:58 - Redirecting to submit.php - Array
+(
+    [application_id] => 39
+)
+
+2026-03-25 15:39:58 - Tables created successfully

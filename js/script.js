@@ -271,7 +271,8 @@ document.getElementById('investor-form').addEventListener('submit', function(e) 
     }
     
     // Validate file uploads
-    const requiredFiles = ['investorId', 'beneficiaryId', 'passbook', 'paymentSlip'];
+    // Note: index.php also has proofDocuments + otherDocuments as required fields.
+    const requiredFiles = ['investorId', 'beneficiaryId', 'passbook', 'paymentSlip', 'proofDocuments', 'otherDocuments'];
     let missingFiles = [];
     
     requiredFiles.forEach(fileId => {
