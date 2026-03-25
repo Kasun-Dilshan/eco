@@ -1,0 +1,205 @@
+2025-12-10 11:41:57 - Tables created successfully
+2025-12-10 11:41:57 - Form submission started - Array
+(
+    [fullName] => Dilshan
+    [nameWithInitials] => kasun
+    [nicNo] => 200130400384
+    [telNo] => 0717499981
+    [dob] => 2007-12-10
+    [email] => dkasun558@gmail.com
+    [address] => 368/6 Rathnapura Road Kalawana
+    [occupation] => IT
+    [employerName] => Kasun Dilshan
+    [beneficiaryName] => Array
+        (
+            [0] => Kassa
+        )
+
+    [beneficiaryNIC] => Array
+        (
+            [0] => 200130400385
+        )
+
+    [beneficiaryPercentage] => Array
+        (
+            [0] => 100
+        )
+
+    [years] => 2
+    [signingDate] => 2025-12-10
+    [accountNo] => 87223146
+    [bank] => BOC
+    [branch] => Colombo
+    [declaration] => accepted
+    [declarationDate] => 2025-12-10
+)
+
+2025-12-10 11:41:57 - Files received - Array
+(
+    [signatureUpload] => Array
+        (
+            [name] => ID_1 (2).pdf
+            [type] => application/pdf
+            [tmp_name] => C:\xampp\tmp\phpA664.tmp
+            [error] => 0
+            [size] => 149739
+        )
+
+    [investorId] => Array
+        (
+            [name] => ID_1 (2).pdf
+            [type] => application/pdf
+            [tmp_name] => C:\xampp\tmp\phpA675.tmp
+            [error] => 0
+            [size] => 149739
+        )
+
+    [beneficiaryId] => Array
+        (
+            [name] => ID_1 (3).pdf
+            [type] => application/pdf
+            [tmp_name] => C:\xampp\tmp\phpA676.tmp
+            [error] => 0
+            [size] => 149739
+        )
+
+    [passbook] => Array
+        (
+            [name] => ID_1.pdf
+            [type] => application/pdf
+            [tmp_name] => C:\xampp\tmp\phpA677.tmp
+            [error] => 0
+            [size] => 149739
+        )
+
+    [paymentSlip] => Array
+        (
+            [name] => Bank_Slip_1.pdf
+            [type] => application/pdf
+            [tmp_name] => C:\xampp\tmp\phpA687.tmp
+            [error] => 0
+            [size] => 150243
+        )
+
+    [finalSignature] => Array
+        (
+            [name] => ID_1 (2).pdf
+            [type] => application/pdf
+            [tmp_name] => C:\xampp\tmp\phpA698.tmp
+            [error] => 0
+            [size] => 149739
+        )
+
+)
+
+2025-12-10 11:41:57 - POST request received
+2025-12-10 11:41:57 - Processing form data - Array
+(
+    [fullName] => Dilshan
+    [nameWithInitials] => kasun
+    [nicNo] => 200130400384
+    [telNo] => 0717499981
+    [dob] => 2007-12-10
+    [email] => dkasun558@gmail.com
+    [address] => 368/6 Rathnapura Road Kalawana
+    [occupation] => IT
+    [employerName] => Kasun Dilshan
+    [beneficiaryName] => Array
+        (
+            [0] => Kassa
+        )
+
+    [beneficiaryNIC] => Array
+        (
+            [0] => 200130400385
+        )
+
+    [beneficiaryPercentage] => Array
+        (
+            [0] => 100
+        )
+
+    [years] => 2
+    [signingDate] => 2025-12-10
+    [accountNo] => 87223146
+    [bank] => BOC
+    [branch] => Colombo
+    [declaration] => accepted
+    [declarationDate] => 2025-12-10
+)
+
+2025-12-10 11:41:57 - Attempting to upload file - Array
+(
+    [source] => C:\xampp\tmp\phpA664.tmp
+    [destination] => C:\xampp\htdocs\eco-wealth-portal/uploads/69390f2d9d41c_1765347117_ID_1__2_.pdf
+    [file_size] => 149739
+)
+
+2025-12-10 11:41:57 - File uploaded successfully - 69390f2d9d41c_1765347117_ID_1__2_.pdf
+2025-12-10 11:41:57 - Attempting to upload file - Array
+(
+    [source] => C:\xampp\tmp\phpA675.tmp
+    [destination] => C:\xampp\htdocs\eco-wealth-portal/uploads/69390f2d9dd2c_1765347117_ID_1__2_.pdf
+    [file_size] => 149739
+)
+
+2025-12-10 11:41:57 - File uploaded successfully - 69390f2d9dd2c_1765347117_ID_1__2_.pdf
+2025-12-10 11:41:57 - Attempting to upload file - Array
+(
+    [source] => C:\xampp\tmp\phpA676.tmp
+    [destination] => C:\xampp\htdocs\eco-wealth-portal/uploads/69390f2d9e8ff_1765347117_ID_1__3_.pdf
+    [file_size] => 149739
+)
+
+2025-12-10 11:41:57 - File uploaded successfully - 69390f2d9e8ff_1765347117_ID_1__3_.pdf
+2025-12-10 11:41:57 - Attempting to upload file - Array
+(
+    [source] => C:\xampp\tmp\phpA677.tmp
+    [destination] => C:\xampp\htdocs\eco-wealth-portal/uploads/69390f2d9fa50_1765347117_ID_1.pdf
+    [file_size] => 149739
+)
+
+2025-12-10 11:41:57 - File uploaded successfully - 69390f2d9fa50_1765347117_ID_1.pdf
+2025-12-10 11:41:57 - Attempting to upload file - Array
+(
+    [source] => C:\xampp\tmp\phpA687.tmp
+    [destination] => C:\xampp\htdocs\eco-wealth-portal/uploads/69390f2da0173_1765347117_Bank_Slip_1.pdf
+    [file_size] => 150243
+)
+
+2025-12-10 11:41:57 - File uploaded successfully - 69390f2da0173_1765347117_Bank_Slip_1.pdf
+2025-12-10 11:41:57 - Attempting to upload file - Array
+(
+    [source] => C:\xampp\tmp\phpA698.tmp
+    [destination] => C:\xampp\htdocs\eco-wealth-portal/uploads/69390f2da07f9_1765347117_ID_1__2_.pdf
+    [file_size] => 149739
+)
+
+2025-12-10 11:41:57 - File uploaded successfully - 69390f2da07f9_1765347117_ID_1__2_.pdf
+2025-12-10 11:41:57 - Investor inserted successfully - Array
+(
+    [id] => 1
+)
+
+2025-12-10 11:41:57 - Beneficiary inserted - Array
+(
+    [investor_id] => 1
+    [name] => Kassa
+)
+
+2025-12-10 11:41:57 - Transaction committed successfully - Array
+(
+    [application_id] => 1
+)
+
+2025-12-10 11:41:59 - Email sending attempt - Array
+(
+    [sent] => 
+    [to] => dkasun558@gmail.com
+)
+
+2025-12-10 11:41:59 - Redirecting to submit.php - Array
+(
+    [application_id] => 1
+)
+
