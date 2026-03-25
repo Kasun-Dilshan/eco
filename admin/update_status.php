@@ -36,7 +36,7 @@ if (!in_array($status, ['approved', 'rejected', 'pending'])) {
 
 try {
     // First, check if the application exists
-    $checkStmt = $db->prepare("SELECT id, email FROM investors WHERE id = ?");
+    $checkStmt = $db->prepare("SELECT id, email, investment_type FROM investors WHERE id = ?");
     $checkStmt->execute([$id]);
     $application = $checkStmt->fetch();
     
@@ -56,6 +56,9 @@ try {
     // Update application status
     $updateStmt = $db->prepare("UPDATE investors SET status = ?, updated_at = NOW() WHERE id = ?");
     $updateStmt->execute([$status, $id]);
+
+    $planCode = strtoupper(trim((string)($application['investment_type'] ?? '')));
+    $applicationRef = 'EWF-' . ($planCode !== '' ? ($planCode . '-') : '') . str_pad($id, 6, '0', STR_PAD_LEFT);
     
     // Log the status change
     $logStmt = $db->prepare("
@@ -95,7 +98,7 @@ try {
             <div class='content'>
                 <h3>Application Status Update</h3>
                 <p>Dear Investor,</p>
-                <p>Your investment application (ID: EWF-" . str_pad($id, 6, '0', STR_PAD_LEFT) . ") has been <span class='status-{$status}'>{$status}</span>.</p>";
+                <p>Your investment application (ID: {$applicationRef}) has been <span class='status-{$status}'>{$status}</span>.</p>";
         
         if ($status === 'approved') {
             $message .= "<p>Congratulations! Your application has been approved. Our team will contact you shortly with further details.</p>";

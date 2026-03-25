@@ -310,19 +310,16 @@ require_once 'config.php';
 
 
   <div class="form-group">
-                <label for="investmentType" class="required">Investment Type</label>
+                <label for="investmentType" class="required">Investment Plan</label>
                 <div class="input-container">
                     <select id="investmentType" name="investmentType" required>
-                        <option value="">Select Investment Type</option>
-                        <option value="green_bonds" <?php echo isset($_SESSION['form_data']['investmentType']) && $_SESSION['form_data']['investmentType'] == 'green_bonds' ? 'selected' : ''; ?>>Green Bonds</option>
-                        <option value="sustainable_etf" <?php echo isset($_SESSION['form_data']['investmentType']) && $_SESSION['form_data']['investmentType'] == 'sustainable_etf' ? 'selected' : ''; ?>>Sustainable ETF</option>
-                        <option value="renewable_energy" <?php echo isset($_SESSION['form_data']['investmentType']) && $_SESSION['form_data']['investmentType'] == 'renewable_energy' ? 'selected' : ''; ?>>Renewable Energy Projects</option>
-                        <option value="esg_funds" <?php echo isset($_SESSION['form_data']['investmentType']) && $_SESSION['form_data']['investmentType'] == 'esg_funds' ? 'selected' : ''; ?>>ESG Mutual Funds</option>
-                        <option value="carbon_credits" <?php echo isset($_SESSION['form_data']['investmentType']) && $_SESSION['form_data']['investmentType'] == 'carbon_credits' ? 'selected' : ''; ?>>Carbon Credits</option>
-                        <option value="green_real_estate" <?php echo isset($_SESSION['form_data']['investmentType']) && $_SESSION['form_data']['investmentType'] == 'green_real_estate' ? 'selected' : ''; ?>>Green Real Estate</option>
-                        <option value="sustainable_agriculture" <?php echo isset($_SESSION['form_data']['investmentType']) && $_SESSION['form_data']['investmentType'] == 'sustainable_agriculture' ? 'selected' : ''; ?>>Sustainable Agriculture</option>
-                        <option value="water_management" <?php echo isset($_SESSION['form_data']['investmentType']) && $_SESSION['form_data']['investmentType'] == 'water_management' ? 'selected' : ''; ?>>Water Management</option>
-                        <option value="other" <?php echo isset($_SESSION['form_data']['investmentType']) && $_SESSION['form_data']['investmentType'] == 'other' ? 'selected' : ''; ?>>Other</option>
+                        <option value="">Select Investment Plan</option>
+                        <option value="HPP" <?php echo isset($_SESSION['form_data']['investmentType']) && $_SESSION['form_data']['investmentType'] == 'HPP' ? 'selected' : ''; ?>>High profit plan</option>
+                        <option value="GSP" <?php echo isset($_SESSION['form_data']['investmentType']) && $_SESSION['form_data']['investmentType'] == 'GSP' ? 'selected' : ''; ?>>Green saving plan</option>
+                        <option value="GSI" <?php echo isset($_SESSION['form_data']['investmentType']) && $_SESSION['form_data']['investmentType'] == 'GSI' ? 'selected' : ''; ?>>Green silver plan</option>
+                        <option value="GOLD" <?php echo isset($_SESSION['form_data']['investmentType']) && $_SESSION['form_data']['investmentType'] == 'GOLD' ? 'selected' : ''; ?>>Gold plan</option>
+                        <option value="SFPS" <?php echo isset($_SESSION['form_data']['investmentType']) && $_SESSION['form_data']['investmentType'] == 'SFPS' ? 'selected' : ''; ?>>Seraa farm profit share plan</option>
+                        <option value="SFHPS" <?php echo isset($_SESSION['form_data']['investmentType']) && $_SESSION['form_data']['investmentType'] == 'SFHPS' ? 'selected' : ''; ?>>Seraa farm high profit share plan</option>
                     </select>
                     <div class="input-highlight"></div>
                 </div>

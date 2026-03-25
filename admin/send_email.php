@@ -28,7 +28,7 @@ try {
     
     // Get all applications for dropdown
     $stmt = $db->prepare("
-        SELECT id, full_name, email, status 
+        SELECT id, full_name, email, status, investment_type 
         FROM investors 
         WHERE email IS NOT NULL AND email != ''
         ORDER BY full_name
@@ -42,6 +42,12 @@ try {
 
 $error = '';
 $success = '';
+
+function buildApplicationRef($applicationId, $investmentType) {
+    $planCode = strtoupper(trim((string)($investmentType ?? '')));
+    $planCodeSegment = $planCode !== '' ? ($planCode . '-') : '';
+    return 'EWF-' . $planCodeSegment . str_pad((int)$applicationId, 6, '0', STR_PAD_LEFT);
+}
 
 // Handle email sending
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -67,7 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $toEmail = $targetApplication['email'];
                 $toName = $targetApplication['full_name'];
-                $applicationRef = 'EWF-' . str_pad($targetApplication['id'], 6, '0', STR_PAD_LEFT);
+                $applicationRef = buildApplicationRef($targetApplication['id'], $targetApplication['investment_type'] ?? '');
                 
                 // Prepare email content
                 if ($templateId) {
@@ -433,7 +439,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 <?php foreach ($allApplications as $app): ?>
                                     <option value="<?php echo $app['id']; ?>"
                                             <?php echo ($applicationId == $app['id']) ? 'selected' : ''; ?>>
-                                        EWF-<?php echo str_pad($app['id'], 6, '0', STR_PAD_LEFT); ?> - 
+                                    <?php echo htmlspecialchars(buildApplicationRef($app['id'], $app['investment_type'] ?? '')); ?> - 
                                         <?php echo htmlspecialchars($app['full_name']); ?> - 
                                         <?php echo htmlspecialchars($app['email']); ?>
                                     </option>
@@ -462,7 +468,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 </div>
                                 <div class="detail-item">
                                     <div class="detail-label">Application ID</div>
-                                    <div class="detail-value">EWF-<?php echo str_pad($application['id'], 6, '0', STR_PAD_LEFT); ?></div>
+                                    <div class="detail-value"><?php echo htmlspecialchars(buildApplicationRef($application['id'], $application['investment_type'] ?? '')); ?></div>
                                 </div>
                             </div>
                         </div>
@@ -662,7 +668,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Replace template variables with sample data
             let previewBody = body
                 .replace(/{full_name}/g, 'John Doe')
-                .replace(/{application_id}/g, 'EWF-000001')
+                .replace(/{application_id}/g, 'EWF-HPP-000001')
                 .replace(/{nic_no}/g, '123456789V')
                 .replace(/{email}/g, 'john@example.com')
                 .replace(/{phone}/g, '+94 77 123 4567')

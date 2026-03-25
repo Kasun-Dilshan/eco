@@ -323,7 +323,6 @@ try {
     <title>Application Details | Serendub Green Plantation Admin</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        <style>
         /* ... Keep all existing CSS styles ... */
         
         /* New styles for 3-tier approval system */
@@ -2379,7 +2378,17 @@ try {
                      <div class="info-row">
                         <div class="info-label">Investment Type</div>
                         <div class="info-value">
-                            <span class="badge percentage"><?php echo $application['investment_type']; ?> </span>
+                            <span class="badge percentage"><?php
+                                $investmentTypeNames = [
+                                    'HPP' => 'High profit plan',
+                                    'GSP' => 'Green saving plan',
+                                    'GSI' => 'Green silver plan',
+                                    'GOLD' => 'Gold plan',
+                                    'SFPS' => 'Seraa farm profit share plan',
+                                    'SFHPS' => 'Seraa farm high profit share plan'
+                                ];
+                                echo htmlspecialchars($investmentTypeNames[$application['investment_type']] ?? $application['investment_type']);
+                            ?> </span>
                         </div>
                     </div>
 

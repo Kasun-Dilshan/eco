@@ -942,7 +942,17 @@ try {
                         </tr>
                         <tr class="info-row">
                             <td class="info-label">Investment Type</td>
-                            <td class="info-value"><?php echo ucwords(str_replace('_', ' ', $user['investment_type'])); ?></td>
+                            <td class="info-value"><?php
+                                $investmentTypeNames = [
+                                    'HPP' => 'High profit plan',
+                                    'GSP' => 'Green saving plan',
+                                    'GSI' => 'Green silver plan',
+                                    'GOLD' => 'Gold plan',
+                                    'SFPS' => 'Seraa farm profit share plan',
+                                    'SFHPS' => 'Seraa farm high profit share plan'
+                                ];
+                                echo htmlspecialchars($investmentTypeNames[$user['investment_type']] ?? $user['investment_type']);
+                            ?></td>
                         </tr>
                         <tr class="info-row">
                             <td class="info-label">Signing Date</td>

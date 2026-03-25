@@ -132,15 +132,13 @@ class FormProcessor {
                 'accountNo', 'bank', 'branch', 'declarationDate'
             ];
 
-            // Add validation for investment type
+            // Add validation for investment plan type codes
             $validInvestmentTypes = [
-                'green_bonds', 'sustainable_etf', 'renewable_energy', 
-                'esg_funds', 'carbon_credits', 'green_real_estate',
-                'sustainable_agriculture', 'water_management', 'other'
+                'HPP', 'GSP', 'GSI', 'GOLD', 'SFPS', 'SFHPS'
             ];
 
             if (!in_array($data['investmentType'], $validInvestmentTypes)) {
-                throw new Exception("Please select a valid investment type.");
+                throw new Exception("Please select a valid investment plan.");
             }
             
             foreach ($requiredFields as $field) {

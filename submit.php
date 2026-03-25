@@ -29,6 +29,25 @@ if ($applicationId && isset($_SESSION['application_id'])) {
 if ($email && isset($_SESSION['user_email'])) {
     unset($_SESSION['user_email']);
 }
+
+// Build application reference with selected investment plan code
+$planCode = '';
+if ($applicationId) {
+    try {
+        $stmt = $db->prepare("SELECT investment_type FROM investors WHERE id = ?");
+        $stmt->execute([(int)$applicationId]);
+        $row = $stmt->fetch();
+        $planCode = strtoupper(trim((string)($row['investment_type'] ?? '')));
+    } catch (Exception $e) {
+        // If plan code lookup fails, still generate a fallback reference using only the ID.
+        $planCode = '';
+    }
+}
+
+$planCodeSegment = $planCode !== '' ? ($planCode . '-') : '';
+$applicationReference = $applicationId
+    ? 'EWI-' . $planCodeSegment . str_pad($applicationId, 6, '0', STR_PAD_LEFT)
+    : 'EWI-' . ($_GET['ref'] ?? 'N/A');
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -449,7 +468,7 @@ if ($email && isset($_SESSION['user_email'])) {
                 <div class="info-grid">
                     <div class="info-item">
                         <div class="info-label">Application Reference</div>
-                        <div class="application-id"><?php echo htmlspecialchars($applicationId ? "EWI-" . str_pad($applicationId, 6, '0', STR_PAD_LEFT) : "EWI-" . ($_GET['ref'] ?? 'N/A')); ?></div>
+                        <div class="application-id"><?php echo htmlspecialchars($applicationReference); ?></div>
                     </div>
                     
                     <div class="info-item">
@@ -611,7 +630,7 @@ if ($email && isset($_SESSION['user_email'])) {
                     
                     <div style="text-align: center;">
                         <div class="confirmation-id">
-                            Application Reference: <?php echo $applicationId ? "EWI-" . str_pad($applicationId, 6, '0', STR_PAD_LEFT) : "EWI-" . ($_GET['ref'] ?? 'N/A'); ?>
+                            Application Reference: <?php echo htmlspecialchars($applicationReference); ?>
                         </div>
                         <p>Date: <?php echo date('F d, Y'); ?></p>
                         <p>Time: <?php echo date('h:i A'); ?></p>

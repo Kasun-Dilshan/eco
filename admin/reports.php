@@ -798,12 +798,15 @@ if (isset($_GET['generate_pdf'])) {
                             </select>
                         </div>
                         <div class="filter-group">
-                            <label><i class="fas fa-money-bill-wave"></i> Investment Type</label>
+                            <label><i class="fas fa-money-bill-wave"></i> Investment Plan</label>
                             <select name="investment_type">
-                                <option value="all" <?php echo $investment_type === 'all' ? 'selected' : ''; ?>>All Types</option>
-                                <option value="standard" <?php echo $investment_type === 'standard' ? 'selected' : ''; ?>>Standard</option>
-                                <option value="premium" <?php echo $investment_type === 'premium' ? 'selected' : ''; ?>>Premium</option>
-                                <option value="enterprise" <?php echo $investment_type === 'enterprise' ? 'selected' : ''; ?>>Enterprise</option>
+                                <option value="all" <?php echo $investment_type === 'all' ? 'selected' : ''; ?>>All Plans</option>
+                                <option value="HPP" <?php echo $investment_type === 'HPP' ? 'selected' : ''; ?>>High profit plan</option>
+                                <option value="GSP" <?php echo $investment_type === 'GSP' ? 'selected' : ''; ?>>Green saving plan</option>
+                                <option value="GSI" <?php echo $investment_type === 'GSI' ? 'selected' : ''; ?>>Green silver plan</option>
+                                <option value="GOLD" <?php echo $investment_type === 'GOLD' ? 'selected' : ''; ?>>Gold plan</option>
+                                <option value="SFPS" <?php echo $investment_type === 'SFPS' ? 'selected' : ''; ?>>Seraa farm profit share plan</option>
+                                <option value="SFHPS" <?php echo $investment_type === 'SFHPS' ? 'selected' : ''; ?>>Seraa farm high profit share plan</option>
                             </select>
                         </div>
                     </div>

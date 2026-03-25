@@ -425,12 +425,21 @@ function getGreeting() {
                         </tr>
                     </thead>
                     <tbody>
-                        <?php foreach ($recentApplications as $application): ?>
+                        <?php
+                        $investmentTypeNames = [
+                            'HPP' => 'High profit plan',
+                            'GSP' => 'Green saving plan',
+                            'GSI' => 'Green silver plan',
+                            'GOLD' => 'Gold plan',
+                            'SFPS' => 'Seraa farm profit share plan',
+                            'SFHPS' => 'Seraa farm high profit share plan'
+                        ];
+                        foreach ($recentApplications as $application): ?>
                         <tr>
                             <td>SGI-<?php echo str_pad($application['id'], 6, '0', STR_PAD_LEFT); ?></td>
                             <td><?php echo htmlspecialchars($application['full_name']); ?></td>
                             <td><?php echo htmlspecialchars($application['nic_no']); ?></td>
-                            <td><?php echo ucfirst(str_replace('_', ' ', $application['investment_type'] ?? 'N/A')); ?></td>
+                            <td><?php echo htmlspecialchars($investmentTypeNames[$application['investment_type']] ?? ($application['investment_type'] ?? 'N/A')); ?></td>
                             <td><?php echo $application['created_date']; ?></td>
                             <td>
                                 <a href="view_application.php?id=<?php echo $application['id']; ?>" class="action-btn">

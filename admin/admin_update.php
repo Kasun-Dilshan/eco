@@ -42,7 +42,7 @@ if (empty($approver)) {
 
 try {
     // Check if the application exists
-    $checkStmt = $db->prepare("SELECT id, email, status FROM investors WHERE id = ?");
+    $checkStmt = $db->prepare("SELECT id, email, status, investment_type FROM investors WHERE id = ?");
     $checkStmt->execute([$id]);
     $application = $checkStmt->fetch();
     
@@ -66,6 +66,9 @@ try {
         WHERE id = ?
     ");
     $updateStmt->execute([$status, $approver, $status, $id]);
+
+    $planCode = strtoupper(trim((string)($application['investment_type'] ?? '')));
+    $applicationRef = 'EWF-' . ($planCode !== '' ? ($planCode . '-') : '') . str_pad($id, 6, '0', STR_PAD_LEFT);
     
     // Log the status change
     $logStmt = $db->prepare("
@@ -100,7 +103,7 @@ try {
             <div class='content'>
                 <h3>Application Status Update</h3>
                 <p>Dear Investor,</p>
-                <p>Your investment application (ID: EWF-" . str_pad($id, 6, '0', STR_PAD_LEFT) . ") has been <span class='{$statusClass}'>{$status}</span>.</p>";
+                <p>Your investment application (ID: {$applicationRef}) has been <span class='{$statusClass}'>{$status}</span>.</p>";
         
         if ($status === 'approved') {
             $message .= "<p>Congratulations! Your application has been approved.</p>

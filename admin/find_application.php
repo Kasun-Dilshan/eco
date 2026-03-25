@@ -430,15 +430,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generate_agreement'])
                             <div><i class="fas fa-phone"></i> <?php echo htmlspecialchars($app['tel_no']); ?></div>
                             <div><i class="fas fa-chart-line"></i> Investment Type: <?php 
                                 $types = [
-                                    'green_bonds' => 'Green Bonds',
-                                    'sustainable_etf' => 'Sustainable ETF',
-                                    'renewable_energy' => 'Renewable Energy',
-                                    'esg_funds' => 'ESG Funds',
-                                    'carbon_credits' => 'Carbon Credits',
-                                    'green_real_estate' => 'Green Real Estate',
-                                    'sustainable_agriculture' => 'Sustainable Agriculture',
-                                    'water_management' => 'Water Management',
-                                    'other' => 'Other'
+                                    'HPP' => 'High profit plan',
+                                    'GSP' => 'Green saving plan',
+                                    'GSI' => 'Green silver plan',
+                                    'GOLD' => 'Gold plan',
+                                    'SFPS' => 'Seraa farm profit share plan',
+                                    'SFHPS' => 'Seraa farm high profit share plan'
                                 ];
                                 echo $types[$app['investment_type']] ?? 'Unknown';
                             ?></div>
