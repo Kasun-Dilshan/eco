@@ -7,7 +7,8 @@ CREATE TABLE IF NOT EXISTS investors (
     id INT AUTO_INCREMENT PRIMARY KEY,
     full_name VARCHAR(255) NOT NULL,
     name_with_initials VARCHAR(255) NOT NULL,
-    nic_no VARCHAR(20) NOT NULL UNIQUE,
+    nic_no VARCHAR(20) NOT NULL,
+    INDEX idx_investors_nic_no (nic_no),
     tel_no VARCHAR(20) NOT NULL,
     dob DATE NOT NULL,
     email VARCHAR(255) NOT NULL,
@@ -26,6 +27,7 @@ CREATE TABLE IF NOT EXISTS investors (
     passbook_doc VARCHAR(255),
     payment_slip_doc VARCHAR(255),
     final_signature VARCHAR(255),
+    sales_person_code VARCHAR(50) NULL,
     status ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP

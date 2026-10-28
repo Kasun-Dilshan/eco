@@ -42,6 +42,8 @@ if (empty($approver)) {
 
 try {
     // Check if the application exists
+    require_once '../includes/application_helpers.php';
+
     $checkStmt = $db->prepare("SELECT id, email, status, investment_type FROM investors WHERE id = ?");
     $checkStmt->execute([$id]);
     $application = $checkStmt->fetch();
@@ -67,8 +69,7 @@ try {
     ");
     $updateStmt->execute([$status, $approver, $status, $id]);
 
-    $planCode = strtoupper(trim((string)($application['investment_type'] ?? '')));
-    $applicationRef = ($planCode !== '' ? ($planCode . '-') : '') . str_pad($id, 6, '0', STR_PAD_LEFT);
+    $applicationRef = buildApplicationRef($id, $application['investment_type'] ?? '');
     
     // Log the status change
     $logStmt = $db->prepare("
@@ -81,7 +82,7 @@ try {
     
     // Send email notification
     if (in_array($status, ['approved', 'rejected'])) {
-        $subject = "Your EcoWealth Application Status Update";
+        $subject = "Your SERENDIB GREEN PLANTATION PVT LTD Application Status Update";
         $statusClass = ($status === 'approved') ? 'status-approved' : 'status-rejected';
         
         $message = "
@@ -98,7 +99,7 @@ try {
         </head>
         <body>
             <div class='header'>
-                <h2>EcoWealth Finance</h2>
+                <h2>SERENDIB GREEN PLANTATION PVT LTD</h2>
             </div>
             <div class='content'>
                 <h3>Application Status Update</h3>
@@ -115,10 +116,10 @@ try {
         }
         
         $message .= "
-                <p>Thank you for choosing EcoWealth Finance.</p>
+                <p>Thank you for choosing SERENDIB GREEN PLANTATION PVT LTD.</p>
             </div>
             <div class='footer'>
-                <p>© " . date('Y') . " EcoWealth Finance. All rights reserved.</p>
+                <p>© " . date('Y') . " SERENDIB GREEN PLANTATION PVT LTD. All rights reserved.</p>
             </div>
         </body>
         </html>

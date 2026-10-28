@@ -1,16 +1,58 @@
 <?php
 require_once '../config.php';
 require_once '../db.php';
+require_once dirname(__DIR__) . '/includes/agreement_helpers.php';
 
 session_start();
 
-
+// Admin auth (same pattern used across admin pages)
+if (
+    !isset($_SESSION['user_id']) &&
+    !isset($_SESSION['approver_id']) &&
+    !isset($_SESSION['admin_id']) &&
+    !(function_exists('isAdminLoggedIn') && isAdminLoggedIn())
+) {
+    header('Location: index.php');
+    exit();
+}
 
 // Initialize variables
 $message = '';
 $messageType = '';
 $search = $_GET['search'] ?? '';
 $applications = [];
+
+// Support one-click generation from agreement_redirect.php
+if (($_GET['auto_generate'] ?? '') === '1' && isset($_GET['investor_id'])) {
+    $autoInvestorId = (int)$_GET['investor_id'];
+    if ($autoInvestorId > 0) {
+        try {
+            // Get investor details
+            $stmt = $db->prepare("SELECT * FROM investors WHERE id = ? AND status = 'approved'");
+            $stmt->execute([$autoInvestorId]);
+            $investor = $stmt->fetch();
+
+            if ($investor) {
+                $performedBy = $_SESSION['admin_name'] ?? $_SESSION['user_name'] ?? $_SESSION['approver_name'] ?? 'Admin';
+                $result = createAgreementForInvestor($db, $investor, $performedBy);
+
+                if (!empty($result['success']) && !empty($result['agreement_id'])) {
+                    header('Location: view_agreement.php?id=' . (int)$result['agreement_id']);
+                    exit();
+                }
+
+                $message = $result['message'] ?? 'Failed to create agreement';
+                $messageType = 'error';
+            } else {
+                $message = "Investor not found or not approved!";
+                $messageType = 'error';
+            }
+        } catch (PDOException $e) {
+            $message = "Database error: " . $e->getMessage();
+            $messageType = 'error';
+        }
+    }
+}
 
 // Search for applications
 if (!empty($search)) {
@@ -51,41 +93,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generate_agreement'])
             $investor = $stmt->fetch();
             
             if ($investor) {
-                // Generate agreement number
-                $agreementNumber = date('Y') . '-' . str_pad($investorId, 6, '0', STR_PAD_LEFT) . '-' . rand(1000, 9999);
-                
-                // Insert new agreement
-                $stmt = $db->prepare("
-                    INSERT INTO agreements (
-                        investor_id, agreement_number, agreement_type, status,
-                        generated_by, generated_at, expiration_date
-                    ) VALUES (?, ?, 'investment', 'draft', ?, NOW(), DATE_ADD(NOW(), INTERVAL 30 DAY))
-                ");
-                
-                $stmt->execute([
-                    $investorId,
-                    $agreementNumber,
-                    $_SESSION['admin_name']
-                ]);
-                
-                $agreementId = $db->lastInsertId();
-                
-                // Log the creation
-                $logStmt = $db->prepare("
-                    INSERT INTO agreement_logs (agreement_id, action, description, performed_by)
-                    VALUES (?, ?, ?, ?)
-                ");
-                
-                $logStmt->execute([
-                    $agreementId,
-                    'agreement_created',
-                    'Created new agreement ' . $agreementNumber . ' for ' . $investor['full_name'],
-                    $_SESSION['admin_name']
-                ]);
-                
-                // Redirect to view agreement
-                header("Location: view_agreement.php?id=" . $agreementId);
-                exit();
+                $performedBy = $_SESSION['admin_name'] ?? $_SESSION['user_name'] ?? $_SESSION['approver_name'] ?? 'Admin';
+                $result = createAgreementForInvestor($db, $investor, $performedBy);
+
+                if (!empty($result['success']) && !empty($result['agreement_id'])) {
+                    header('Location: view_agreement.php?id=' . (int)$result['agreement_id']);
+                    exit();
+                }
+
+                $message = $result['message'] ?? 'Failed to create agreement';
+                $messageType = 'error';
             } else {
                 $message = "Investor not found or not approved!";
                 $messageType = 'error';
@@ -103,7 +120,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generate_agreement'])
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Find Application | EcoWealth Admin</title>
+    <title>Find Application | SERENDIB GREEN PLANTATION PVT LTD Admin</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {

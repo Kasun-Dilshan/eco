@@ -53,7 +53,7 @@ try {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Branch Dashboard | EcoWealth Finance</title>
+    <title>Branch Dashboard | SERENDIB GREEN PLANTATION PVT LTD</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         /* Similar styles to admin dashboard but simplified */
@@ -338,7 +338,7 @@ try {
         
         <!-- Footer -->
         <div class="footer">
-            <p>© <?php echo date('Y'); ?> EcoWealth Finance. Branch Portal v1.0</p>
+            <p>© <?php echo date('Y'); ?> SERENDIB GREEN PLANTATION PVT LTD. Branch Portal v1.0</p>
             <p>Logged in as: <?php echo htmlspecialchars($_SESSION['username']); ?> | 
                User Type: <?php echo ucfirst(str_replace('_', ' ', $_SESSION['user_type'])); ?> | 
                IP: <?php echo $_SERVER['REMOTE_ADDR'] ?? 'Unknown'; ?></p>

@@ -1,0 +1,9 @@
+# Prevent caching admin PHP pages (fixes blank cached responses)
+<IfModule mod_headers.c>
+    <FilesMatch "\.(php)$">
+        Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        Header set Pragma "no-cache"
+        Header set Expires "0"
+        Header set Vary "Cookie"
+    </FilesMatch>
+</IfModule>

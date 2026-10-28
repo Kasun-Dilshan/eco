@@ -67,7 +67,8 @@ function validateUploadedFile($file, $type = 'image') {
     
     // Check file size
     if ($file['size'] > MAX_FILE_SIZE) {
-        $errors[] = 'File size exceeds maximum limit of 5MB';
+        $maxMb = defined('MAX_FILE_SIZE_MB') ? (int)MAX_FILE_SIZE_MB : 3;
+        $errors[] = 'File size exceeds maximum limit of ' . $maxMb . 'MB';
     }
     
     // Check file type

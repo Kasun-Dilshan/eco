@@ -252,7 +252,8 @@ class User {
             // File Management
             'upload_files' => 'Upload Files',
             'download_files' => 'Download Files',
-            'delete_files' => 'Delete Files'
+            'delete_files' => 'Delete Files',
+            'replace_uploads' => 'Replace Uploaded Files (before first approval)',
         ];
         
         return $permissions;
@@ -426,6 +427,19 @@ class User {
     }
     
     /**
+     * Check whether a column exists on the users table.
+     */
+    private function usersTableHasColumn($column) {
+        try {
+            $stmt = $this->db->prepare("SHOW COLUMNS FROM users LIKE ?");
+            $stmt->execute([$column]);
+            return (bool) $stmt->fetch();
+        } catch (PDOException $e) {
+            return false;
+        }
+    }
+
+    /**
      * Get all users - FIXED VERSION
      */
     public function getAllUsers($filters = []) {
@@ -458,25 +472,28 @@ class User {
         $whereClause = $where ? 'WHERE ' . implode(' AND ', $where) : '';
         
         // Fixed SQL query - simplified without GROUP_CONCAT
+        $orderBy = $this->usersTableHasColumn('created_at') ? 'u.created_at DESC' : 'u.id DESC';
         $sql = "
             SELECT u.*
             FROM users u
             $whereClause
-            ORDER BY u.created_at DESC
+            ORDER BY $orderBy
         ";
         
         $stmt = $this->db->prepare($sql);
         $stmt->execute($params);
         $users = $stmt->fetchAll();
-        
-        // Get permissions separately for each user
+
+        $hasCreatedByColumn = $this->investorsTableHasCreatedBy();
+
         foreach ($users as &$user) {
             $user['permissions'] = $this->getUserPermissions($user['id']);
-            
-            // Get additional statistics
-            $user['total_applications'] = $this->getUserApplicationsCount($user['id']);
-            $user['total_actions'] = $this->getUserActionsCount($user['id']);
+            $user['total_applications'] = $hasCreatedByColumn
+                ? $this->getUserApplicationsCount($user['id'], true)
+                : 0;
+            $user['total_actions'] = 0;
         }
+        unset($user);
         
         return $users;
     }
@@ -503,23 +520,38 @@ class User {
     }
     
     /**
-     * Get user applications count
+     * Check whether investors.created_by exists (cached per request).
      */
-    private function getUserApplicationsCount($userId) {
+    private function investorsTableHasCreatedBy() {
+        static $hasColumn = null;
+        if ($hasColumn !== null) {
+            return $hasColumn;
+        }
+
         try {
-            // Check if investors table has created_by column
             $stmt = $this->db->prepare("SHOW COLUMNS FROM investors LIKE 'created_by'");
             $stmt->execute();
-            $hasCreatedByColumn = $stmt->fetch();
-            
-            if ($hasCreatedByColumn) {
-                $stmt = $this->db->prepare("SELECT COUNT(*) as count FROM investors WHERE created_by = ?");
-                $stmt->execute([$userId]);
-                $result = $stmt->fetch();
-                return $result['count'] ?? 0;
+            $hasColumn = (bool) $stmt->fetch();
+        } catch (PDOException $e) {
+            $hasColumn = false;
+        }
+
+        return $hasColumn;
+    }
+
+    /**
+     * Get user applications count
+     */
+    private function getUserApplicationsCount($userId, $skipColumnCheck = false) {
+        try {
+            if (!$skipColumnCheck && !$this->investorsTableHasCreatedBy()) {
+                return 0;
             }
-            
-            return 0;
+
+            $stmt = $this->db->prepare("SELECT COUNT(*) as count FROM investors WHERE created_by = ?");
+            $stmt->execute([$userId]);
+            $result = $stmt->fetch();
+            return $result['count'] ?? 0;
         } catch (PDOException $e) {
             error_log("Error getting user applications count: " . $e->getMessage());
             return 0;
@@ -861,9 +893,4 @@ class User {
         }
     }
 }
-
-
-
-?>
-
 

@@ -7,6 +7,12 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+// Admin-only access
+if (!isset($_SESSION['user_id']) || (($_SESSION['user_type'] ?? null) !== 'admin')) {
+    header('Location: dashboard.php');
+    exit();
+}
+
 
 // Include User class
 require_once 'includes/User.php';
@@ -438,7 +444,7 @@ $permissions = $user->getPermissions();
                         </a>
                     </li>
                     <li>
-                        <a href="users.php">
+                        <a href="manage_users.php">
                             <i class="fas fa-users"></i> User Management
                         </a>
                     </li>
@@ -476,7 +482,7 @@ $permissions = $user->getPermissions();
             <div class="content-header">
                 <h1>Add New User</h1>
                 <div class="header-actions">
-                    <a href="users.php" class="btn btn-secondary">
+                    <a href="manage_users.php" class="btn btn-secondary">
                         <i class="fas fa-arrow-left"></i> Back to Users
                     </a>
                 </div>

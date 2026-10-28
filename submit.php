@@ -2,6 +2,7 @@
 session_start(); // THIS LINE IS CRITICAL
 require_once 'config.php';
 require_once 'db.php';
+require_once 'includes/application_helpers.php';
 
 // Check if user came from a successful form submission
 $applicationId = isset($_SESSION['application_id']) ? $_SESSION['application_id'] : null;
@@ -44,10 +45,9 @@ if ($applicationId) {
     }
 }
 
-$planCodeSegment = $planCode !== '' ? ($planCode . '-') : '';
 $applicationReference = $applicationId
-    ? 'EWI-' . $planCodeSegment . str_pad($applicationId, 6, '0', STR_PAD_LEFT)
-    : 'EWI-' . ($_GET['ref'] ?? 'N/A');
+    ? buildApplicationRef($applicationId, $planCode)
+    : ($_GET['ref'] ?? 'N/A');
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -507,13 +507,16 @@ $applicationReference = $applicationId
                     </li>
                     <li>
                         <div class="step-title">Account Activation</div>
-                        <div class="step-desc">Your investment account will be activated and you'll receive login credentials.</div>
+                        <div class="step-desc">Create your investor portal password using your NIC number to view investment and return details online.</div>
                     </li>
                 </ul>
             </div>
             
             <div class="action-buttons">
-                <a href="index.php" class="btn btn-primary">
+                <a href="investor/register.php" class="btn btn-primary">
+                    <i class="fas fa-key"></i> Create Investor Login
+                </a>
+                <a href="index.php" class="btn btn-secondary">
                     <i class="fas fa-home"></i> Back to Home
                 </a>
                 <a href="javascript:void(0)" onclick="window.print()" class="btn print-btn">

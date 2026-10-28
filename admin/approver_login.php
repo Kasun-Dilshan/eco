@@ -34,29 +34,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($approver) {
                 // Verify password
                 if (password_verify($password, $approver['password'])) {
-                    // Successful login
+                    try {
+                        $logStmt = $db->prepare("
+                            INSERT INTO approver_logs (approver_id, action, ip_address)
+                            VALUES (?, 'login', ?)
+                        ");
+                        $logStmt->execute([$approver['id'], $_SERVER['REMOTE_ADDR']]);
+                    } catch (PDOException $logError) {
+                        error_log("Approver login log skipped: " . $logError->getMessage());
+                    }
+
                     $_SESSION['approver_id'] = $approver['id'];
                     $_SESSION['approver_name'] = $approver['name'];
                     $_SESSION['approver_email'] = $approver['email'];
                     $_SESSION['approver_role'] = $approver['role'];
                     $_SESSION['approver_level'] = $approver['level'];
-                    
-                    // Update last login
-                    $updateStmt = $db->prepare("
-                        UPDATE approvers 
-                        SET last_login = NOW() 
-                        WHERE id = ?
-                    ");
-                    $updateStmt->execute([$approver['id']]);
-                    
-                    // Log login activity
-                    $logStmt = $db->prepare("
-                        INSERT INTO approver_logs (approver_id, action, ip_address)
-                        VALUES (?, 'login', ?)
-                    ");
-                    $logStmt->execute([$approver['id'], $_SERVER['REMOTE_ADDR']]);
-                    
-                    // Redirect to approver dashboard
+
                     header('Location: approver_dashboard.php');
                     exit();
                     

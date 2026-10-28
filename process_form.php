@@ -2,6 +2,9 @@
 session_start();
 require_once 'config.php';
 require_once 'db.php';
+require_once 'includes/application_helpers.php';
+require_once 'includes/approval_email.php';
+require_once 'includes/investor_auth.php';
 
 
 
@@ -27,14 +30,16 @@ class FormProcessor {
             return [false, null, $errors];
         }
         
+        if (in_array((int)$file['error'], [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true)
+            || ((int)$file['error'] === UPLOAD_ERR_OK && ($file['size'] ?? 0) > MAX_FILE_SIZE)
+        ) {
+            $errors[] = 'Invalid file attachment';
+            return [false, null, $errors];
+        }
+
         if ($file['error'] !== UPLOAD_ERR_OK) {
             $errors[] = "Error uploading {$fieldName}. Error code: " . $file['error'];
             return [false, null, $errors];
-        }
-        
-        // Check file size
-        if ($file['size'] > MAX_FILE_SIZE) {
-            $errors[] = "{$fieldName} is too large. Maximum size is 5MB.";
         }
         
         // Check file type
@@ -113,7 +118,7 @@ class FormProcessor {
         
         return mail($investorEmail, $subject, $message, $headers);
     }
-    
+
     public function processForm($data, $files) {
         debug_log("Processing form data", $data);
         
@@ -125,12 +130,48 @@ class FormProcessor {
                 $data['declarationDate'] = date('Y-m-d');
             }
             
+            // Normalize text fields to block letters
+            $uppercaseFields = [
+                'fullName', 'nameWithInitials', 'nicNo', 'address',
+                'occupation', 'employerName', 'bank', 'branch'
+            ];
+            foreach ($uppercaseFields as $field) {
+                if (isset($data[$field])) {
+                    $data[$field] = strtoupper(trim($data[$field]));
+                }
+            }
+            if (isset($data['beneficiaryName']) && is_array($data['beneficiaryName'])) {
+                foreach ($data['beneficiaryName'] as $i => $name) {
+                    $data['beneficiaryName'][$i] = strtoupper(trim($name));
+                }
+            }
+            if (isset($data['beneficiaryNIC']) && is_array($data['beneficiaryNIC'])) {
+                foreach ($data['beneficiaryNIC'] as $i => $nic) {
+                    $data['beneficiaryNIC'][$i] = strtoupper(trim($nic));
+                }
+            }
+
+            $data['email'] = trim($data['email'] ?? '');
+            if ($data['email'] !== '' && !filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
+                throw new Exception("Please enter a valid email address.");
+            }
+
+            $data['employerName'] = trim($data['employerName'] ?? '');
+            $data['nameWithInitials'] = trim($data['nameWithInitials'] ?? '');
+            $applicantType = (isset($data['applicantType']) && $data['applicantType'] === 'company')
+                ? 'company'
+                : 'person';
+            $data['applicantType'] = $applicantType;
+
             // Validate required fields
             $requiredFields = [
-                'fullName', 'nameWithInitials', 'nicNo', 'telNo', 'dob', 'email',
-                'address', 'occupation', 'employerName', 'years', 'investmentType', 'signingDate',
-                'accountNo', 'bank', 'branch', 'declarationDate'
+                'fullName', 'nicNo', 'telNo', 'dob',
+                'address', 'occupation', 'years', 'investmentType', 'signingDate',
+                'accountNo', 'bank', 'branch', 'declarationDate', 'salesPersonCode'
             ];
+            if ($applicantType === 'person') {
+                array_splice($requiredFields, 1, 0, 'nameWithInitials');
+            }
 
             // Add validation for investment plan type codes
             $validInvestmentTypes = [
@@ -140,6 +181,33 @@ class FormProcessor {
             if (!in_array($data['investmentType'], $validInvestmentTypes)) {
                 throw new Exception("Please select a valid investment plan.");
             }
+
+            $data['gspPlan'] = trim($data['gspPlan'] ?? '');
+            $data['gspPaymentOption'] = trim($data['gspPaymentOption'] ?? '');
+            $data['maturityAmount'] = null;
+
+            if ($data['investmentType'] === 'GSP') {
+                $validGspPlans = ['plan1', 'plan2', 'plan3'];
+                if (!in_array($data['gspPlan'], $validGspPlans, true)) {
+                    throw new Exception("Please select a GSP plan (Plan 1, Plan 2, or Plan 3).");
+                }
+                if ($data['gspPlan'] === 'plan1') {
+                    $validGspPayments = ['one_time', '5250', '6120', '4600', '3700'];
+                    if (!in_array($data['gspPaymentOption'], $validGspPayments, true)) {
+                        throw new Exception("Please select a valid GSP payment option.");
+                    }
+                    // Plan 01 one-time payment: investment 200,000 → maturity 1,000,000
+                    if ($data['gspPaymentOption'] === 'one_time') {
+                        $data['investmentAmount'] = '200000';
+                        $data['maturityAmount'] = '1000000';
+                    }
+                } else {
+                    $data['gspPaymentOption'] = '';
+                }
+            } else {
+                $data['gspPlan'] = '';
+                $data['gspPaymentOption'] = '';
+            }
             
             foreach ($requiredFields as $field) {
                 if (empty($data[$field])) {
@@ -147,6 +215,19 @@ class FormProcessor {
                 }
             }
             
+            // Validate sales person code
+            $salesPersonCode = strtoupper(trim($data['salesPersonCode']));
+            $salesPersonStmt = $this->db->prepare("
+                SELECT id FROM sales_persons
+                WHERE sales_code = ? AND status = 'active'
+                LIMIT 1
+            ");
+            $salesPersonStmt->execute([$salesPersonCode]);
+            if (!$salesPersonStmt->fetch()) {
+                throw new Exception("Invalid sales person code. Please check the code and try again.");
+            }
+            $data['salesPersonCode'] = $salesPersonCode;
+
             // Validate declaration
             if (!isset($data['declaration']) || $data['declaration'] !== 'accepted') {
                 throw new Exception("You must accept the declaration.");
@@ -171,28 +252,67 @@ class FormProcessor {
             
             // Handle file uploads
             $uploadedFiles = [];
-            $fileFields = [
-                'investorId', 'beneficiaryId', 
+            $requiredFileFields = [
+                'investorId', 'beneficiaryId',
                 'passbook', 'paymentSlip',
-                'proofDocuments', 'otherDocuments'
+                'otherDocuments'
             ];
-            
-            foreach ($fileFields as $field) {
+            $optionalFileFields = ['proofDocuments'];
+
+            foreach ($requiredFileFields as $field) {
+                $fileError = isset($files[$field]) ? (int)$files[$field]['error'] : UPLOAD_ERR_NO_FILE;
+                if (in_array($fileError, [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true)
+                    || ($fileError === UPLOAD_ERR_OK && ($files[$field]['size'] ?? 0) > MAX_FILE_SIZE)
+                ) {
+                    throw new Exception('Invalid file attachment');
+                }
+
                 if (isset($files[$field]) && $files[$field]['error'] === UPLOAD_ERR_OK) {
                     list($valid, $fileName, $errors) = $this->validateFile($files[$field], $field);
-                    
+
                     if (!$valid) {
                         throw new Exception(implode(" ", $errors));
                     }
-                    
+
                     $uploadedFileName = $this->uploadFile($files[$field], $fileName);
                     if (!$uploadedFileName) {
                         throw new Exception("Failed to upload {$field}. Please try again.");
                     }
-                    
+
                     $uploadedFiles[$field] = $uploadedFileName;
                 } else {
                     throw new Exception("{$field} is required. Please upload the file.");
+                }
+            }
+
+            foreach ($optionalFileFields as $field) {
+                if (!isset($files[$field]) || (int)$files[$field]['error'] === UPLOAD_ERR_NO_FILE) {
+                    $uploadedFiles[$field] = null;
+                    continue;
+                }
+
+                $fileError = (int)$files[$field]['error'];
+                if (in_array($fileError, [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true)
+                    || ($fileError === UPLOAD_ERR_OK && ($files[$field]['size'] ?? 0) > MAX_FILE_SIZE)
+                ) {
+                    throw new Exception('Invalid file attachment');
+                }
+
+                if ($fileError === UPLOAD_ERR_OK) {
+                    list($valid, $fileName, $errors) = $this->validateFile($files[$field], $field);
+
+                    if (!$valid) {
+                        throw new Exception(implode(" ", $errors));
+                    }
+
+                    $uploadedFileName = $this->uploadFile($files[$field], $fileName);
+                    if (!$uploadedFileName) {
+                        throw new Exception("Failed to upload {$field}. Please try again.");
+                    }
+
+                    $uploadedFiles[$field] = $uploadedFileName;
+                } else {
+                    $uploadedFiles[$field] = null;
                 }
             }
             
@@ -203,6 +323,8 @@ class FormProcessor {
                     address, occupation, employer_name, years, investment_type,
                     investment_amount, currency, signing_date,
                     account_no, bank_name, branch_name, declaration_date,
+                    sales_person_code, applicant_type,
+                    gsp_plan, gsp_payment_option, maturity_amount,
                     investor_id_doc, beneficiary_id_doc,
                     passbook_doc, payment_slip_doc,
                     proof_documents, other_documents
@@ -211,6 +333,8 @@ class FormProcessor {
                     :address, :occupation, :employer_name, :years, :investment_type,
                     :investment_amount, :currency, :signing_date,
                     :account_no, :bank_name, :branch_name, :declaration_date,
+                    :sales_person_code, :applicant_type,
+                    :gsp_plan, :gsp_payment_option, :maturity_amount,
                     :investor_id_doc, :beneficiary_id_doc,
                     :passbook_doc, :payment_slip_doc,
                     :proof_documents, :other_documents
@@ -219,11 +343,11 @@ class FormProcessor {
             
             $stmt->execute([
                 ':full_name' => $data['fullName'],
-                ':name_with_initials' => $data['nameWithInitials'],
+                ':name_with_initials' => $data['nameWithInitials'] !== '' ? $data['nameWithInitials'] : '',
                 ':nic_no' => $data['nicNo'],
                 ':tel_no' => $data['telNo'],
                 ':dob' => $data['dob'],
-                ':email' => $data['email'],
+                ':email' => $data['email'] !== '' ? $data['email'] : '',
                 ':address' => $data['address'],
                 ':occupation' => $data['occupation'],
                 ':employer_name' => $data['employerName'],
@@ -236,6 +360,11 @@ class FormProcessor {
                 ':bank_name' => $data['bank'],
                 ':branch_name' => $data['branch'],
                 ':declaration_date' => $data['declarationDate'],
+                ':sales_person_code' => $data['salesPersonCode'],
+                ':applicant_type' => $data['applicantType'],
+                ':gsp_plan' => $data['gspPlan'] !== '' ? $data['gspPlan'] : null,
+                ':gsp_payment_option' => $data['gspPaymentOption'] !== '' ? $data['gspPaymentOption'] : null,
+                ':maturity_amount' => $data['maturityAmount'] !== null && $data['maturityAmount'] !== '' ? $data['maturityAmount'] : null,
                 ':investor_id_doc' => $uploadedFiles['investorId'],
                 ':beneficiary_id_doc' => $uploadedFiles['beneficiaryId'],
                 ':passbook_doc' => $uploadedFiles['passbook'],
@@ -247,6 +376,9 @@ class FormProcessor {
             $investorId = $this->db->lastInsertId();
             
             debug_log("Investor inserted successfully", ['id' => $investorId]);
+
+            // If this NIC already has a portal password, reuse it on the new proposal
+            syncPortalPasswordToInvestor($this->db, (int) $investorId, (string) $data['nicNo']);
             
             // Insert beneficiaries
             $beneficiaryStmt = $this->db->prepare("
@@ -285,9 +417,23 @@ class FormProcessor {
             
             debug_log("Transaction committed successfully", ['application_id' => $investorId]);
             
-            // Send email notification
-            $emailSent = $this->sendEmail($data['email'], $investorId);
-            debug_log("Email sending attempt", ['sent' => $emailSent, 'to' => $data['email']]);
+            // Send email notification when an address was provided
+            if ($data['email'] !== '') {
+                $emailSent = $this->sendEmail($data['email'], $investorId);
+                debug_log("Email sending attempt", ['sent' => $emailSent, 'to' => $data['email']]);
+            }
+
+            // Notify first approver (must not block successful submission)
+            try {
+                $approverNotified = sendApproverLevelEmail($this->db, (int) $investorId, 1, 'new_application');
+                debug_log('First approver notification', array(
+                    'sent_count' => $approverNotified,
+                    'application_id' => $investorId,
+                ));
+            } catch (Exception $e) {
+                error_log('First approver notification failed: ' . $e->getMessage());
+                debug_log('First approver notification failed', $e->getMessage());
+            }
             
             return [
                 'success' => true,
@@ -339,6 +485,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit();
     } else {
         $_SESSION['error'] = $result['message'];
+        if (stripos($result['message'], 'sales person code') !== false) {
+            $_SESSION['field_errors']['salesPersonCode'] = $result['message'];
+        }
         // Store form data in session for repopulation
         $_SESSION['form_data'] = $_POST;
         

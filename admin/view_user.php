@@ -6,7 +6,7 @@ require_once '../db.php';
 
 $userId = $_GET['id'] ?? 0;
 if (!$userId) {
-    header('Location: users.php');
+    header('Location: manage_users.php');
     exit();
 }
 
@@ -91,7 +91,7 @@ try {
     $user = $stmt->fetch();
     
     if (!$user) {
-        header('Location: users.php');
+        header('Location: manage_users.php');
         exit();
     }
     
@@ -1090,6 +1090,8 @@ try {
                         ['icon' => 'fa-id-card', 'label' => 'Beneficiary ID', 'field' => 'beneficiary_id_doc'],
                         ['icon' => 'fa-book', 'label' => 'Passbook', 'field' => 'passbook_doc'],
                         ['icon' => 'fa-receipt', 'label' => 'Payment Slip', 'field' => 'payment_slip_doc'],
+                        ['icon' => 'fa-file-circle-check', 'label' => 'Proof Documents', 'field' => 'proof_documents'],
+                        ['icon' => 'fa-file-lines', 'label' => 'Proposal Form', 'field' => 'other_documents'],
                         ['icon' => 'fa-signature', 'label' => 'Final Signature', 'field' => 'final_signature']
                     ];
                     
@@ -1299,7 +1301,7 @@ try {
                 </head>
                 <body>
                     <div class="header">
-                        <h1>EcoWealth Finance - User Details</h1>
+                        <h1>SERENDIB GREEN PLANTATION PVT LTD - User Details</h1>
                         <p>Printed: <?php echo date('F d, Y H:i:s'); ?></p>
                     </div>
                     ${printContent}

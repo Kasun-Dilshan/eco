@@ -1,6 +1,7 @@
 <?php
 require_once '../config.php';
 require_once '../db.php';
+require_once '../includes/application_helpers.php';
 
 // Start session if not already started
 if (session_status() === PHP_SESSION_NONE) {
@@ -8,14 +9,17 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 // Check if admin is logged in
-if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
-    header('Location: index.php');
+if (
+    !isset($_SESSION['user_id']) ||
+    (($_SESSION['user_type'] ?? null) !== 'admin')
+) {
+    header('Location: dashboard.php');
     exit();
 }
 
 $user_id = $_GET['id'] ?? 0;
 if (!$user_id) {
-    header('Location: users.php');
+    header('Location: manage_users.php');
     exit();
 }
 
@@ -36,7 +40,7 @@ try {
     $user_data = $stmt->fetch();
     
     if (!$user_data) {
-        header('Location: users.php');
+        header('Location: manage_users.php');
         exit();
     }
 } catch (PDOException $e) {
@@ -45,6 +49,9 @@ try {
 
 // Get user permissions
 $user_permissions = [];
+$user_permissions_by_category = [];
+$staff_managed_permissions = getStaffManagedPermissions();
+$staff_permission_keys = getUserPermissionKeys($db, $user_id);
 try {
     $stmt = $db->prepare("
         SELECT p.*, pc.category_name 
@@ -58,12 +65,18 @@ try {
     $user_permissions = $stmt->fetchAll();
     
     // Organize user permissions by category
-    $user_permissions_by_category = [];
     foreach ($user_permissions as $perm) {
         $user_permissions_by_category[$perm['category_name']][] = $perm;
     }
 } catch (PDOException $e) {
     // If permissions table doesn't exist, just continue
+}
+
+$total_permission_count = count($user_permissions);
+foreach ($staff_managed_permissions as $permKey => $permMeta) {
+    if (in_array($permKey, $staff_permission_keys, true)) {
+        $total_permission_count++;
+    }
 }
 
 // Handle form submission
@@ -133,22 +146,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 // Handle permissions update
                 if (isset($form_data['permissions'])) {
-                    // Clear existing permissions
-                    $db->prepare("DELETE FROM user_permissions WHERE user_id = ?")->execute([$user_id]);
-                    
-                    // Insert new permissions
-                    $perm_stmt = $db->prepare("
-                        INSERT INTO user_permissions (user_id, permission_id) 
-                        SELECT :user_id, id FROM permissions WHERE permission_key = :permission_key
-                    ");
-                    
-                    foreach ($form_data['permissions'] as $permission_key) {
-                        $perm_stmt->execute([
-                            ':user_id' => $user_id,
-                            ':permission_key' => $permission_key
-                        ]);
+                    // Clear existing category permissions only when that UI is used
+                    try {
+                        $db->prepare("DELETE FROM user_permissions WHERE user_id = ? AND permission_id IS NOT NULL")->execute([$user_id]);
+                        
+                        // Insert new permissions
+                        $perm_stmt = $db->prepare("
+                            INSERT INTO user_permissions (user_id, permission_id) 
+                            SELECT :user_id, id FROM permissions WHERE permission_key = :permission_key
+                        ");
+                        
+                        foreach ($form_data['permissions'] as $permission_key) {
+                            $perm_stmt->execute([
+                                ':user_id' => $user_id,
+                                ':permission_key' => $permission_key
+                            ]);
+                        }
+                    } catch (PDOException $e) {
+                        // Category permissions table may not exist on all installs
                     }
                 }
+
+                // Staff-managed permissions (string keys)
+                syncStaffManagedPermissions(
+                    $db,
+                    $user_id,
+                    $form_data['staff_permissions'] ?? [],
+                    $form_data['user_type'] ?? $user_data['user_type']
+                );
                 
                 $db->commit();
                 
@@ -159,21 +184,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $user_data = $stmt->fetch();
                 
                 // Refresh user permissions
-                $stmt = $db->prepare("
-                    SELECT p.*, pc.category_name 
-                    FROM user_permissions up 
-                    JOIN permissions p ON up.permission_id = p.id 
-                    JOIN permission_categories pc ON p.category_id = pc.id
-                    WHERE up.user_id = ?
-                    ORDER BY pc.category_name, p.permission_name
-                ");
-                $stmt->execute([$user_id]);
-                $user_permissions = $stmt->fetchAll();
-                
-                // Reorganize by category
+                $user_permissions = [];
                 $user_permissions_by_category = [];
-                foreach ($user_permissions as $perm) {
-                    $user_permissions_by_category[$perm['category_name']][] = $perm;
+                try {
+                    $stmt = $db->prepare("
+                        SELECT p.*, pc.category_name 
+                        FROM user_permissions up 
+                        JOIN permissions p ON up.permission_id = p.id 
+                        JOIN permission_categories pc ON p.category_id = pc.id
+                        WHERE up.user_id = ?
+                        ORDER BY pc.category_name, p.permission_name
+                    ");
+                    $stmt->execute([$user_id]);
+                    $user_permissions = $stmt->fetchAll();
+                    
+                    foreach ($user_permissions as $perm) {
+                        $user_permissions_by_category[$perm['category_name']][] = $perm;
+                    }
+                } catch (PDOException $e) {
+                    // Category permissions table may not exist
+                }
+
+                $staff_permission_keys = getUserPermissionKeys($db, $user_id);
+                $total_permission_count = count($user_permissions);
+                foreach ($staff_managed_permissions as $permKey => $permMeta) {
+                    if (in_array($permKey, $staff_permission_keys, true)) {
+                        $total_permission_count++;
+                    }
                 }
                 
             }
@@ -210,7 +247,7 @@ try {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Edit User | EcoWealth Admin</title>
+    <title>Edit User | SERENDIB GREEN PLANTATION PVT LTD Admin</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
@@ -705,7 +742,7 @@ try {
                         </a>
                     </li>
                     <li class="active">
-                        <a href="users.php">
+                        <a href="manage_users.php">
                             <i class="fas fa-users"></i> Users
                         </a>
                     </li>
@@ -723,7 +760,7 @@ try {
             <div class="content-header">
                 <h1><i class="fas fa-user-edit"></i> Edit User: <?php echo htmlspecialchars($user_data['full_name']); ?></h1>
                 <div class="header-actions">
-                    <a href="users.php" class="btn btn-secondary">
+                    <a href="manage_users.php" class="btn btn-secondary">
                         <i class="fas fa-arrow-left"></i> Back to Users
                     </a>
                 </div>
@@ -772,16 +809,16 @@ try {
                 </div>
                 <div class="info-item">
                     <div class="info-label">Total Permissions</div>
-                    <div class="info-value"><?php echo count($user_permissions); ?></div>
+                    <div class="info-value"><?php echo (int)$total_permission_count; ?></div>
                 </div>
             </div>
             
             <!-- Current Permissions Summary -->
-            <?php if (!empty($user_permissions_by_category)): ?>
+            <?php if (!empty($user_permissions_by_category) || !empty(array_intersect(array_keys($staff_managed_permissions), $staff_permission_keys))): ?>
             <div class="permissions-summary">
                 <div class="summary-header">
                     <h2 class="summary-title"><i class="fas fa-shield-alt"></i> Current Permissions</h2>
-                    <div class="permission-count"><?php echo count($user_permissions); ?> Permissions</div>
+                    <div class="permission-count"><?php echo (int)$total_permission_count; ?> Permissions</div>
                 </div>
                 
                 <?php foreach ($user_permissions_by_category as $category_name => $category_permissions): ?>
@@ -800,6 +837,31 @@ try {
                         </div>
                     </div>
                 <?php endforeach; ?>
+
+                <?php
+                $activeStaffPerms = [];
+                foreach ($staff_managed_permissions as $permKey => $permMeta) {
+                    if (in_array($permKey, $staff_permission_keys, true)) {
+                        $activeStaffPerms[$permKey] = $permMeta;
+                    }
+                }
+                ?>
+                <?php if (!empty($activeStaffPerms)): ?>
+                    <div class="category-summary">
+                        <div class="category-header">
+                            <div class="category-name">Staff Access</div>
+                            <div class="category-count"><?php echo count($activeStaffPerms); ?></div>
+                        </div>
+                        <div class="permissions-list">
+                            <?php foreach ($activeStaffPerms as $permMeta): ?>
+                                <div class="permission-item-summary">
+                                    <div class="permission-name"><?php echo htmlspecialchars($permMeta['name']); ?></div>
+                                    <div class="permission-desc"><?php echo htmlspecialchars($permMeta['description']); ?></div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                <?php endif; ?>
             </div>
             <?php elseif (!empty($user_data['user_type'])): ?>
             <div class="permissions-summary">
@@ -812,6 +874,11 @@ try {
                     <div style="background: rgba(34, 197, 94, 0.1); padding: 15px; border-radius: 8px; margin-top: 15px;">
                         <strong><?php echo ucfirst(str_replace('_', ' ', $user_data['user_type'])); ?> Role</strong>
                     </div>
+                    <?php if (($user_data['user_type'] ?? '') === 'staff'): ?>
+                        <p style="margin-top: 18px; color: var(--text-muted);">
+                            Use the <strong>Staff Permissions</strong> section below to grant replace-upload access.
+                        </p>
+                    <?php endif; ?>
                 </div>
             </div>
             <?php endif; ?>
@@ -895,6 +962,30 @@ try {
                         </div>
                     </div>
                     
+                    <!-- Staff Permissions -->
+                    <div class="permissions-section" id="staffPermissionsSection" style="<?php echo ($user_data['user_type'] ?? '') === 'staff' ? '' : 'display:none;'; ?>">
+                        <h2 class="form-title">Staff Permissions</h2>
+                        <p class="password-hint">
+                            These options apply only to Staff users. Replace-upload access works only while the application is still pending at the first approver.
+                            Staff can also edit application details in that same window (before first approval).
+                        </p>
+                        <div class="permission-list">
+                            <?php foreach ($staff_managed_permissions as $permKey => $permMeta): ?>
+                                <div class="permission-item">
+                                    <input type="checkbox"
+                                           id="staff_perm_<?php echo htmlspecialchars($permKey); ?>"
+                                           name="staff_permissions[]"
+                                           value="<?php echo htmlspecialchars($permKey); ?>"
+                                           <?php echo in_array($permKey, $staff_permission_keys, true) ? 'checked' : ''; ?>>
+                                    <div class="permission-label">
+                                        <div class="permission-name-edit"><?php echo htmlspecialchars($permMeta['name']); ?></div>
+                                        <div class="permission-desc-edit"><?php echo htmlspecialchars($permMeta['description']); ?></div>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+
                     <!-- Permissions Edit Section - Only show if permissions exist -->
                     <?php if (!empty($permissions)): ?>
                     <div class="permissions-section">
@@ -955,7 +1046,7 @@ try {
                         <button type="submit" class="btn btn-primary btn-full">
                             <i class="fas fa-save"></i> Update User
                         </button>
-                        <a href="users.php" class="btn btn-secondary btn-full">
+                        <a href="manage_users.php" class="btn btn-secondary btn-full">
                             <i class="fas fa-times"></i> Cancel
                         </a>
                     </div>
@@ -1062,6 +1153,21 @@ try {
                 }
             });
         });
+
+        function toggleStaffPermissionsSection() {
+            const userType = document.getElementById('user_type');
+            const section = document.getElementById('staffPermissionsSection');
+            if (!userType || !section) {
+                return;
+            }
+            section.style.display = userType.value === 'staff' ? '' : 'none';
+        }
+
+        const userTypeSelect = document.getElementById('user_type');
+        if (userTypeSelect) {
+            userTypeSelect.addEventListener('change', toggleStaffPermissionsSection);
+            toggleStaffPermissionsSection();
+        }
         
         document.querySelector('form').addEventListener('submit', function(e) {
             const password = document.getElementById('password').value;

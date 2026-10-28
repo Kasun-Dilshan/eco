@@ -11,16 +11,24 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
 
 // Get filter parameters
 $filter = $_GET['filter'] ?? 'all';
-$search = $_GET['search'] ?? '';
+$search = trim($_GET['search'] ?? '');
+$branch = trim($_GET['branch'] ?? '');
 
 // Build query
 $whereClause = '';
 $params = [];
 
 if (!empty($search)) {
-    $whereClause = "WHERE (i.full_name LIKE ? OR i.email LIKE ? OR i.nic_no LIKE ?)";
+    $whereClause = "WHERE (
+        i.full_name LIKE ? OR
+        i.email LIKE ? OR
+        i.nic_no LIKE ? OR
+        i.tel_no LIKE ? OR
+        i.agreement_no LIKE ? OR
+        CAST(i.id AS CHAR) LIKE ?
+    )";
     $searchTerm = "%$search%";
-    $params = array_fill(0, 3, $searchTerm);
+    $params = array_fill(0, 6, $searchTerm);
 }
 
 if ($filter !== 'all') {
@@ -32,6 +40,17 @@ if ($filter !== 'all') {
     $params[] = $filter;
 }
 
+if ($branch !== '') {
+    if ($whereClause) {
+        $whereClause .= " AND sp.branch = ?";
+    } else {
+        $whereClause = "WHERE sp.branch = ?";
+    }
+    $params[] = $branch;
+}
+
+$salesPersonJoin = 'LEFT JOIN sales_persons sp ON sp.sales_code = i.sales_person_code';
+
 try {
     // Get applications
     $query = "
@@ -40,6 +59,7 @@ try {
                COUNT(b.id) as beneficiary_count,
                a.username as reviewed_by_name
         FROM investors i
+        $salesPersonJoin
         LEFT JOIN beneficiaries b ON i.id = b.investor_id
         LEFT JOIN admin_users a ON i.reviewed_by = a.id
         $whereClause

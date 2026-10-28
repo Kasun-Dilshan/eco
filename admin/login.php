@@ -66,7 +66,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Login | EcoWealth</title>
+    <title>Admin Login | SERENDIB GREEN PLANTATION PVT LTD</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
@@ -485,7 +485,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </form>
             
             <div class="login-footer">
-                <p>© <?php echo date('Y'); ?> EcoWealth Finance. All rights reserved.</p>
+                <p>© <?php echo date('Y'); ?> SERENDIB GREEN PLANTATION PVT LTD. All rights reserved.</p>
                 <p>For authorized personnel only.</p>
                 <a href="../index.php" class="back-to-site">
                     <i class="fas fa-arrow-left"></i> Back to Main Site

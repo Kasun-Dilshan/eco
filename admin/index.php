@@ -118,31 +118,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($approver) {
                     // Verify password
                     if (password_verify($password, $approver['password'])) {
-                        // Successful login
+                        // Optional: log login activity (table may not exist on all installs)
+                        try {
+                            $logStmt = $db->prepare("
+                                INSERT INTO approver_logs (approver_id, action, ip_address)
+                                VALUES (?, 'login', ?)
+                            ");
+                            $logStmt->execute([$approver['id'], $_SERVER['REMOTE_ADDR']]);
+                        } catch (PDOException $logError) {
+                            error_log("Approver login log skipped: " . $logError->getMessage());
+                        }
+
+                        // Successful login — set session only after credentials are verified
                         $_SESSION['approver_id'] = $approver['id'];
                         $_SESSION['approver_name'] = $approver['name'];
                         $_SESSION['approver_email'] = $approver['email'];
                         $_SESSION['approver_role'] = $approver['role'];
                         $_SESSION['approver_level'] = $approver['level'];
                         $_SESSION['login_type'] = 'approver';
-                        
-                        // Update last login
-                        $updateStmt = $db->prepare("
-                            UPDATE approvers 
-                            SET last_login = NOW(),
-                                last_login_ip = ?
-                            WHERE id = ?
-                        ");
-                        $updateStmt->execute([$_SERVER['REMOTE_ADDR'], $approver['id']]);
-                        
-                        // Log login activity
-                        $logStmt = $db->prepare("
-                            INSERT INTO approver_logs (approver_id, action, ip_address)
-                            VALUES (?, 'login', ?)
-                        ");
-                        $logStmt->execute([$approver['id'], $_SERVER['REMOTE_ADDR']]);
-                        
-                        // Redirect to approver dashboard
+
                         header('Location: dashboard.php');
                         exit();
                         
@@ -665,10 +659,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
             
             <div class="login-type-selector">
-                <button type="button" class="login-type-btn <?php echo $login_type === 'admin' ? 'active' : ''; ?>" onclick="setLoginType('admin')">
+                <button type="button" class="login-type-btn <?php echo $login_type === 'admin' ? 'active' : ''; ?>" data-login-type="admin" onclick="setLoginType('admin', this)">
                     <i class="fas fa-users-cog"></i> Admin Login
                 </button>
-                <button type="button" class="login-type-btn <?php echo $login_type === 'approver' ? 'active' : ''; ?>" onclick="setLoginType('approver')">
+                <button type="button" class="login-type-btn <?php echo $login_type === 'approver' ? 'active' : ''; ?>" data-login-type="approver" onclick="setLoginType('approver', this)">
                     <i class="fas fa-user-check"></i> Approver Login
                 </button>
             </div>
@@ -760,16 +754,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     <script>
         // Function to set login type
-        function setLoginType(type) {
+        function setLoginType(type, buttonEl) {
             document.getElementById('loginType').value = type;
-            
-            // Update active button
+            sessionStorage.setItem('adminLoginType', type);
+
             document.querySelectorAll('.login-type-btn').forEach(btn => {
                 btn.classList.remove('active');
             });
-            event.target.classList.add('active');
-            
-            // Update labels and text
+            if (buttonEl) {
+                buttonEl.classList.add('active');
+            } else {
+                const activeBtn = document.querySelector('.login-type-btn[data-login-type="' + type + '"]');
+                if (activeBtn) {
+                    activeBtn.classList.add('active');
+                }
+            }
+
             if (type === 'admin') {
                 document.getElementById('usernameLabel').textContent = 'Username';
                 document.getElementById('username').placeholder = 'Enter your username';
@@ -838,6 +838,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', function() {
+            const serverLoginType = document.getElementById('loginType').value;
+            const savedLoginType = sessionStorage.getItem('adminLoginType');
+            if (!<?php echo $_SERVER['REQUEST_METHOD'] === 'POST' ? 'true' : 'false'; ?> && savedLoginType && savedLoginType !== serverLoginType) {
+                setLoginType(savedLoginType);
+            }
+
             const usernameField = document.getElementById('username');
             if (!usernameField.value) {
                 usernameField.focus();

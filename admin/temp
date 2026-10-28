@@ -291,7 +291,7 @@ function sendApproverNotification($applicationId, $nextApproverLevel, $db) {
     ];
     
     $to = $approverEmails[$nextApproverLevel] ?? ADMIN_EMAIL;
-    $subject = "EcoWealth - Application #" . str_pad($applicationId, 6, '0', STR_PAD_LEFT) . " Requires Your Approval";
+    $subject = "SERENDIB GREEN PLANTATION PVT LTD - Application #" . str_pad($applicationId, 6, '0', STR_PAD_LEFT) . " Requires Your Approval";
     
     $message = "
     <html>
@@ -306,7 +306,7 @@ function sendApproverNotification($applicationId, $nextApproverLevel, $db) {
     </head>
     <body>
         <div class='header'>
-            <h2>EcoWealth Finance - Approval Required</h2>
+            <h2>SERENDIB GREEN PLANTATION PVT LTD - Approval Required</h2>
         </div>
         <div class='content'>
             <h3>Application Approval Request</h3>
@@ -324,7 +324,7 @@ function sendApproverNotification($applicationId, $nextApproverLevel, $db) {
             </p>
         </div>
         <div class='footer'>
-            <p>© " . date('Y') . " EcoWealth Finance. All rights reserved.</p>
+            <p>© " . date('Y') . " SERENDIB GREEN PLANTATION PVT LTD. All rights reserved.</p>
         </div>
     </body>
     </html>
@@ -343,7 +343,7 @@ function sendApproverNotification($applicationId, $nextApproverLevel, $db) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Application Details | EcoWealth Admin</title>
+    <title>Application Details | SERENDIB GREEN PLANTATION PVT LTD Admin</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         /* ... Keep all existing CSS styles ... */

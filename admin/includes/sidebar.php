@@ -37,6 +37,14 @@ $currentUser = $user->getUser($_SESSION['user_id']);
                     <span>All Applications</span>
                 </a>
             </li>
+            <?php if (($_SESSION['user_type'] ?? null) === 'admin'): ?>
+            <li class="<?php echo ($activeNav ?? '') === 'add_old_investment' ? 'active' : ''; ?>">
+                <a href="add_old_investment.php">
+                    <i class="fas fa-history"></i>
+                    <span>Add Old Investment</span>
+                </a>
+            </li>
+            <?php endif; ?>
             
             <?php if ($user->hasPermission('view_reports') || $_SESSION['user_type'] === 'admin'): ?>
             <li>
@@ -47,12 +55,18 @@ $currentUser = $user->getUser($_SESSION['user_id']);
             </li>
             <?php endif; ?>
             
-            <?php if ($user->hasPermission('view_users') || $_SESSION['user_type'] === 'admin'): ?>
+            <?php if (($_SESSION['user_type'] ?? null) === 'admin'): ?>
             <div class="nav-label">User Management</div>
             <li class="<?php echo $activeNav === 'users' ? 'active' : ''; ?>">
-                <a href="users.php">
+                <a href="manage_users.php">
                     <i class="fas fa-users"></i>
                     <span>Users</span>
+                </a>
+            </li>
+            <li class="<?php echo ($activeNav ?? '') === 'sales_persons' ? 'active' : ''; ?>">
+                <a href="sales_persons.php">
+                    <i class="fas fa-user-tie"></i>
+                    <span>Sales Persons</span>
                 </a>
             </li>
             <li>
@@ -82,7 +96,7 @@ $currentUser = $user->getUser($_SESSION['user_id']);
     <div style="padding: 20px; margin-top: auto; border-top: 1px solid rgba(34, 197, 94, 0.2);">
         <div style="font-size: 12px; color: var(--text-muted); text-align: center;">
             <p>Last login: <?php echo $currentUser['last_login'] ? date('M d, Y H:i', strtotime($currentUser['last_login'])) : 'Never'; ?></p>
-            <p style="margin-top: 5px;">© <?php echo date('Y'); ?> EcoWealth Finance</p>
+            <p style="margin-top: 5px;">© <?php echo date('Y'); ?> SERENDIB GREEN PLANTATION PVT LTD</p>
         </div>
     </div>
 </div>

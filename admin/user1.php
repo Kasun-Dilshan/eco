@@ -4,12 +4,18 @@ require_once '../db.php';
 
 session_start();
 
+// Admin-only access
+if (!isset($_SESSION['user_id']) || (($_SESSION['user_type'] ?? null) !== 'admin')) {
+    header('Location: dashboard.php');
+    exit();
+}
+
 
 
 // Get user ID from query parameter
 $userId = $_GET['id'] ?? 0;
 if (!$userId) {
-    header('Location: users.php');
+    header('Location: manage_users.php');
     exit();
 }
 
@@ -29,7 +35,7 @@ try {
     $user = $stmt->fetch();
     
     if (!$user) {
-        header('Location: users.php');
+        header('Location: manage_users.php');
         exit();
     }
     
@@ -69,7 +75,7 @@ try {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>User Details | EcoWealth Admin</title>
+    <title>User Details | SERENDIB GREEN PLANTATION PVT LTD Admin</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
@@ -363,7 +369,7 @@ try {
     <div class="container">
         <div class="header">
             <h1><i class="fas fa-user"></i> User Details</h1>
-            <a href="users.php" class="btn btn-back">
+            <a href="manage_users.php" class="btn btn-back">
                 <i class="fas fa-arrow-left"></i> Back to Users
             </a>
         </div>

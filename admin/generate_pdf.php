@@ -180,7 +180,7 @@ $html = '
             <div class="info-grid">
                 <div class="info-item">
                     <span class="info-label">Company Name:</span><br>
-                    EcoWealth Finance Ltd.
+                    SERENDIB GREEN PLANTATION PVT LTD
                 </div>
                 <div class="info-item">
                     <span class="info-label">Registration No:</span><br>
@@ -225,7 +225,7 @@ $html = '
     <div class="section">
         <div class="section-title">3. TERMS AND CONDITIONS</div>
         <ol style="margin-left: 20px;">
-            <li>The Investor agrees to invest in sustainable projects managed by EcoWealth Finance Ltd.</li>
+            <li>The Investor agrees to invest in sustainable projects managed by SERENDIB GREEN PLANTATION PVT LTD</li>
             <li>The Company agrees to manage the investment professionally and provide quarterly reports.</li>
             <li>Investment returns are subject to market conditions and project performance.</li>
             <li>This agreement is valid for the specified investment period of ' . $agreement['years'] . ' years.</li>
@@ -246,7 +246,7 @@ $html = '
             <li>I understand the risks associated with this investment.</li>
             <li>I have read and understood all terms and conditions.</li>
             <li>I am investing with my own funds.</li>
-            <li>I authorize EcoWealth Finance to manage my investment as per this agreement.</li>
+            <li>I authorize SERENDIB GREEN PLANTATION PVT LTD to manage my investment as per this agreement.</li>
         </ol>
     </div>
     
@@ -262,7 +262,7 @@ $html = '
             
             <div style="width: 45%;">
                 <div class="signature-line"></div>
-                <p><strong>For EcoWealth Finance Ltd.</strong></p>
+                <p><strong>For SERENDIB GREEN PLANTATION PVT LTD</strong></p>
                 <p>Authorized Signatory</p>
                 <p>Name: ___________________</p>
                 <p>Position: Investment Manager</p>
@@ -272,7 +272,7 @@ $html = '
     </div>
     
     <div class="footer">
-        <p>EcoWealth Finance Ltd. | 123 Green Street, Colombo 01, Sri Lanka</p>
+        <p>SERENDIB GREEN PLANTATION PVT LTD | 123 Green Street, Colombo 01, Sri Lanka</p>
         <p>Tel: +94 11 234 5678 | Email: info@ecowealth.com | Web: www.ecowealth.com</p>
         <p>This document is computer generated. No signature required for draft version.</p>
         <p>Page 1 of 1 | Generated on: ' . date('F d, Y H:i:s') . '</p>

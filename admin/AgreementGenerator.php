@@ -1,4 +1,6 @@
 <?php
+require_once dirname(__DIR__) . '/includes/agreement_helpers.php';
+
 class AgreementGenerator {
     private $db;
     
@@ -59,9 +61,12 @@ class AgreementGenerator {
     
     public function getTemplates() {
         return [
-            ['id' => 1, 'name' => 'Standard Investment Agreement', 'description' => 'Standard agreement with basic terms'],
-            ['id' => 2, 'name' => 'Premium Investment Agreement', 'description' => 'Detailed agreement with comprehensive terms'],
-            ['id' => 3, 'name' => 'Simple Investment Agreement', 'description' => 'Basic agreement for simple investments']
+            ['id' => 1, 'name' => 'HPP Agreement', 'description' => 'High Profit Plan agreement'],
+            ['id' => 2, 'name' => 'GSP Agreement', 'description' => 'Green Saving Plan agreement'],
+            ['id' => 3, 'name' => 'GSI Agreement', 'description' => 'Green Silver Plan agreement'],
+            ['id' => 4, 'name' => 'GOLD Agreement', 'description' => 'Gold Plan agreement'],
+            ['id' => 5, 'name' => 'SFPS Agreement', 'description' => 'Seraa Farm Profit Share Plan agreement'],
+            ['id' => 6, 'name' => 'SFHPS Agreement', 'description' => 'Seraa Farm High Profit Share Plan agreement'],
         ];
     }
     
@@ -74,29 +79,22 @@ class AgreementGenerator {
             }
             
             $investor = $investorData['investor'];
-            
-            // Generate agreement number
-            $agreementNumber = 'AGR-' . str_pad($investorId, 6, '0', STR_PAD_LEFT) . '-' . date('Ymd') . rand(100, 999);
+
+            // Force template from investment plan (6 types = 6 templates)
+            if (function_exists('agreementTemplateIdForInvestmentType')) {
+                $templateId = agreementTemplateIdForInvestmentType((string)($investor['investment_type'] ?? 'HPP'));
+            }
             
             // Create agreements table if it doesn't exist
             $this->createAgreementsTable();
-            
-            // Insert agreement record
-            $stmt = $this->db->prepare("
-                INSERT INTO agreements (
-                    investor_id, agreement_number, template_id, 
-                    status, generated_by, generated_at
-                ) VALUES (?, ?, ?, 'draft', ?, NOW())
-            ");
-            
-            $stmt->execute([
-                $investorId,
-                $agreementNumber,
-                $templateId,
-                $generatedBy
-            ]);
-            
-            $agreementId = $this->db->lastInsertId();
+
+            $result = createAgreementForInvestor($this->db, $investor, (string)$generatedBy);
+            if (empty($result['success'])) {
+                return ['success' => false, 'message' => $result['message'] ?? 'Failed to create agreement'];
+            }
+
+            $agreementId = (int)$result['agreement_id'];
+            $agreementNumber = (string)($result['agreement_number'] ?? '');
             
             // Log the generation
             $logStmt = $this->db->prepare("
@@ -131,12 +129,7 @@ class AgreementGenerator {
             $stmt = $this->db->prepare("
                 SELECT a.*, 
                        DATE_FORMAT(a.generated_at, '%M %d, %Y %H:%i') as formatted_generated,
-                       CASE a.template_id 
-                           WHEN 1 THEN 'Standard Investment Agreement'
-                           WHEN 2 THEN 'Premium Investment Agreement'
-                           WHEN 3 THEN 'Simple Investment Agreement'
-                           ELSE 'Unknown Template'
-                       END as template_name
+                       COALESCE(a.template, 'HPP') as template_name
                 FROM agreements a 
                 WHERE a.investor_id = ? 
                 ORDER BY a.generated_at DESC

@@ -1,6 +1,70 @@
 let currentStep = 1;
 const totalSteps = 6;
 
+function setApplicantType(type) {
+    const isCompany = type === 'company';
+    const applicantTypeInput = document.getElementById('applicantType');
+    const personBtn = document.getElementById('applicantTypePerson');
+    const companyBtn = document.getElementById('applicantTypeCompany');
+    const fullNameLabel = document.getElementById('fullNameLabel');
+    const nameWithInitialsLabel = document.getElementById('nameWithInitialsLabel');
+    const nicNoLabel = document.getElementById('nicNoLabel');
+    const dobLabel = document.getElementById('dobLabel');
+    const fullNameInput = document.getElementById('fullName');
+    const nameWithInitialsInput = document.getElementById('nameWithInitials');
+    const sectionIcon = document.querySelector('#personalSectionIcon i');
+
+    if (applicantTypeInput) {
+        applicantTypeInput.value = isCompany ? 'company' : 'person';
+    }
+
+    if (personBtn) personBtn.classList.toggle('active', !isCompany);
+    if (companyBtn) companyBtn.classList.toggle('active', isCompany);
+
+    if (fullNameLabel) {
+        fullNameLabel.textContent = isCompany ? 'Company Name' : 'Full Name (Block Letters)';
+        fullNameLabel.classList.add('required');
+    }
+
+    if (fullNameInput) {
+        if (isCompany) {
+            fullNameInput.removeAttribute('pattern');
+            fullNameInput.removeAttribute('onkeypress');
+            fullNameInput.title = 'Enter the company name';
+        } else {
+            fullNameInput.setAttribute('pattern', '[A-Z\\s]+');
+            fullNameInput.setAttribute('onkeypress', 'return /[A-Z\\s]/i.test(event.key)');
+            fullNameInput.title = 'Please use only uppercase letters and spaces';
+        }
+    }
+
+    if (nicNoLabel) {
+        nicNoLabel.textContent = isCompany ? 'BR Number' : 'NIC No';
+        nicNoLabel.classList.add('required');
+    }
+
+    if (dobLabel) {
+        dobLabel.textContent = isCompany ? 'Company Started Date' : 'Date of Birth';
+        dobLabel.classList.add('required');
+    }
+
+    if (nameWithInitialsLabel && nameWithInitialsInput) {
+        if (isCompany) {
+            nameWithInitialsLabel.textContent = 'Name with Initials (Optional)';
+            nameWithInitialsLabel.classList.remove('required');
+            nameWithInitialsInput.removeAttribute('required');
+        } else {
+            nameWithInitialsLabel.textContent = 'Name with Initials';
+            nameWithInitialsLabel.classList.add('required');
+            nameWithInitialsInput.setAttribute('required', 'required');
+        }
+    }
+
+    if (sectionIcon) {
+        sectionIcon.className = isCompany ? 'fas fa-building' : 'fas fa-user-astronaut';
+    }
+}
+
 // Update progress bar and step indicators
 function updateProgress() {
     const progress = (currentStep / totalSteps) * 100;
@@ -63,7 +127,7 @@ function validateStep(step) {
     for (let input of inputs) {
         if (input.type === 'checkbox') {
             if (!input.checked) {
-                showValidationError('Please accept the declaration.');
+                showValidationError('You must check the <strong>declaration checkbox</strong> to confirm that the information you provided is accurate and complete before submitting.');
                 input.focus();
                 return false;
             }
@@ -72,27 +136,36 @@ function validateStep(step) {
             continue;
         } else {
             if (!input.value.trim()) {
-                showValidationError(`Please fill in all required fields.`);
+                // Find a human-readable label for the field
+                let fieldLabel = '';
+                const labelEl = document.querySelector(`label[for="${input.id}"]`);
+                if (labelEl) {
+                    fieldLabel = labelEl.textContent.replace(/\s*\*\s*$/, '').trim();
+                } else if (input.placeholder) {
+                    fieldLabel = input.placeholder;
+                } else if (input.name) {
+                    fieldLabel = input.name.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').trim();
+                }
+                const stepNames = {1:'Personal',2:'Profession',3:'Beneficiaries',4:'Payment',5:'Bank Details',6:'Declaration'};
+                const stepLabel = stepNames[step] ? ` (Step ${step}: ${stepNames[step]})` : '';
+                const msg = fieldLabel
+                    ? `<strong>"${fieldLabel}"</strong> is required${stepLabel}. Please fill in this field.`
+                    : `Please fill in all required fields${stepLabel}.`;
+                showValidationError(msg);
                 input.focus();
                 return false;
             }
             
-            // Email validation for step 1
-            if (step === 1 && input.type === 'email') {
-                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-                if (!emailRegex.test(input.value)) {
-                    showValidationError('Please enter a valid email address.');
-                    input.focus();
-                    return false;
-                }
-            }
-            
-            // Date validation for step 1
+            // Date validation for step 1 — allow today, reject only future dates
             if (step === 1 && input.type === 'date' && input.id === 'dob') {
-                const dob = new Date(input.value);
+                const dob = new Date(input.value + 'T00:00:00');
                 const today = new Date();
-                if (dob >= today) {
-                    showValidationError('Date of birth must be in the past.');
+                today.setHours(0, 0, 0, 0);
+                if (dob > today) {
+                    const isCompany = isCompanyApplicant();
+                    showValidationError(isCompany
+                        ? 'Company started date cannot be in the future.'
+                        : 'Date of birth cannot be in the future.');
                     input.focus();
                     return false;
                 }
@@ -120,8 +193,28 @@ function validateStep(step) {
             return false;
         }
     }
+
+    if (step === 5 && hasOversizedAttachment(currentStepElement)) {
+        showValidationError('Invalid file attachment');
+        return false;
+    }
     
     return true;
+}
+
+function hasOversizedAttachment(scope) {
+    const root = scope || document;
+    const fileInputs = root.querySelectorAll('.file-input');
+    for (const input of fileInputs) {
+        if (!input.files || input.files.length === 0) {
+            continue;
+        }
+        const maxFileSize = parseInt(input.dataset.maxSize, 10) || (3 * 1024 * 1024);
+        if (input.files[0].size > maxFileSize) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // Add beneficiary
@@ -139,14 +232,14 @@ function addBeneficiary() {
             <div class="form-group">
                 <label class="required">Beneficiary Name</label>
                 <div class="input-container">
-                    <input type="text" name="beneficiaryName[]" required>
+                    <input type="text" name="beneficiaryName[]" required oninput="this.value = this.value.toUpperCase()">
                     <div class="input-highlight"></div>
                 </div>
             </div>
             <div class="form-group">
                 <label class="required">NIC No</label>
                 <div class="input-container">
-                    <input type="text" name="beneficiaryNIC[]" required>
+                    <input type="text" name="beneficiaryNIC[]" required oninput="this.value = this.value.toUpperCase()">
                     <div class="input-highlight"></div>
                 </div>
             </div>
@@ -177,24 +270,100 @@ function showValidationError(message) {
     // Remove existing error messages
     const existingErrors = document.querySelectorAll('.validation-error');
     existingErrors.forEach(error => error.remove());
-    
+
     // Create error message
     const errorDiv = document.createElement('div');
     errorDiv.className = 'alert error validation-error';
-    errorDiv.innerHTML = `<i class="fas fa-exclamation-circle"></i> ${message}`;
-    
-    // Insert after header
-    const header = document.querySelector('header');
-    if (header) {
-        header.appendChild(errorDiv);
-    }
-    
-    // Auto-remove after 5 seconds
-    setTimeout(() => {
+    errorDiv.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:99999;min-width:320px;max-width:90vw;padding:14px 20px 14px 16px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.35);display:flex;align-items:flex-start;gap:10px;animation:fadeInDown .3s ease;';
+    errorDiv.innerHTML = `
+        <i class="fas fa-exclamation-triangle" style="color:#ff4d4d;font-size:1.2em;margin-top:2px;flex-shrink:0;"></i>
+        <span style="flex:1;line-height:1.5;">${message}</span>
+        <button onclick="this.parentElement.remove()" style="background:none;border:none;cursor:pointer;font-size:1.1em;color:inherit;margin-left:8px;opacity:0.7;padding:0;" title="Dismiss">&times;</button>
+    `;
+
+    document.body.appendChild(errorDiv);
+
+    // Scroll error into view
+    errorDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+    // Auto-remove after 8 seconds
+    const timer = setTimeout(() => {
         if (errorDiv && errorDiv.parentNode) {
-            errorDiv.remove();
+            errorDiv.style.animation = 'fadeOutUp .3s ease forwards';
+            setTimeout(() => errorDiv.remove(), 300);
         }
-    }, 5000);
+    }, 8000);
+
+    // Cancel timer if manually dismissed
+    errorDiv.querySelector('button').addEventListener('click', () => clearTimeout(timer));
+}
+
+function showFieldError(fieldId, message) {
+    const errorEl = document.getElementById(`${fieldId}Error`);
+    const input = document.getElementById(fieldId);
+
+    if (errorEl) {
+        errorEl.textContent = message;
+        errorEl.style.display = 'block';
+    }
+
+    if (input) {
+        input.classList.add('input-error');
+    }
+}
+
+function clearFieldError(fieldId) {
+    const errorEl = document.getElementById(`${fieldId}Error`);
+    const input = document.getElementById(fieldId);
+
+    if (errorEl) {
+        errorEl.textContent = '';
+        errorEl.style.display = 'none';
+    }
+
+    if (input) {
+        input.classList.remove('input-error');
+    }
+}
+
+async function validateSalesPersonCode(code) {
+    const trimmedCode = code.trim().toUpperCase();
+
+    if (!trimmedCode) {
+        showFieldError('salesPersonCode', 'Sales person code is required.');
+        return false;
+    }
+
+    try {
+        const response = await fetch(`validate_sales_code.php?code=${encodeURIComponent(trimmedCode)}`);
+        const data = await response.json();
+
+        if (data.valid) {
+            clearFieldError('salesPersonCode');
+            return true;
+        }
+
+        showFieldError('salesPersonCode', data.message || 'Invalid sales person code. Please check the code and try again.');
+        return false;
+    } catch (error) {
+        showFieldError('salesPersonCode', 'Unable to validate sales code. Please try again.');
+        return false;
+    }
+}
+
+function goToStep(step) {
+    document.querySelectorAll('.form-step').forEach(stepEl => {
+        stepEl.classList.remove('active');
+    });
+
+    const targetStep = document.getElementById(`step${step}`);
+    if (targetStep) {
+        targetStep.classList.add('active');
+    }
+
+    currentStep = step;
+    updateProgress();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 // File upload handlers
@@ -208,13 +377,15 @@ document.addEventListener('DOMContentLoaded', function() {
             if (this.files.length > 0) {
                 const fileName = this.files[0].name;
                 const fileSize = this.files[0].size;
+                const maxFileSize = parseInt(this.dataset.maxSize, 10) || (3 * 1024 * 1024);
+                const fileSizeMb = (fileSize / 1024 / 1024).toFixed(2);
                 
-                // Validate file size (5MB)
-                if (fileSize > 5 * 1024 * 1024) {
-                    showValidationError('File size must be less than 5MB');
+                // Validate file size (reject anything over the allowed MB limit)
+                if (fileSize > maxFileSize) {
+                    showValidationError('Invalid file attachment');
                     this.value = '';
                     if (fileInfoElement) {
-                        fileInfoElement.textContent = 'File too large. Max 5MB.';
+                        fileInfoElement.textContent = 'Invalid file attachment';
                         fileInfoElement.style.color = 'var(--error)';
                     }
                     return;
@@ -234,7 +405,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 
                 if (fileInfoElement) {
-                    fileInfoElement.textContent = `Selected: ${fileName} (${(fileSize / 1024).toFixed(2)} KB)`;
+                    fileInfoElement.textContent = `Selected: ${fileName} (${fileSizeMb} MB)`;
                     fileInfoElement.style.color = 'var(--success)';
                 }
             } else {
@@ -250,73 +421,106 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // Form submission - SIMPLIFIED VERSION
-document.getElementById('investor-form').addEventListener('submit', function(e) {
+document.getElementById('investor-form').addEventListener('submit', async function(e) {
+    if (this.dataset.salesCodeValidated === '1') {
+        delete this.dataset.salesCodeValidated;
+        return true;
+    }
+
+    e.preventDefault();
+
+    const submitBtn = document.querySelector('.submit-btn');
+    const defaultSubmitHtml = '<i class="fas fa-paper-plane"></i> Submit Application';
+
     // Validate all steps before submission
+    const stepNames = {1:'Personal',2:'Profession',3:'Beneficiaries',4:'Payment',5:'Bank Details',6:'Declaration'};
     for (let i = 1; i <= totalSteps; i++) {
         if (!validateStep(i)) {
-            e.preventDefault();
-            // Go to the step with error
-            document.querySelectorAll('.form-step').forEach(step => {
-                step.classList.remove('active');
-            });
-            const errorStep = document.getElementById(`step${i}`);
-            if (errorStep) {
-                errorStep.classList.add('active');
-            }
-            currentStep = i;
-            updateProgress();
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+            goToStep(i);
+            // validateStep already shows the specific field error; add step context if not already shown
             return;
         }
     }
     
-    // Validate file uploads
-    // Note: index.php also has proofDocuments + otherDocuments as required fields.
-    const requiredFiles = ['investorId', 'beneficiaryId', 'passbook', 'paymentSlip', 'proofDocuments', 'otherDocuments'];
+    // Validate optional email format when provided
+    const emailInput = document.getElementById('email');
+    if (emailInput && emailInput.value.trim()) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(emailInput.value.trim())) {
+            showValidationError('Please enter a valid email address.');
+            goToStep(1);
+            emailInput.focus();
+            return;
+        }
+    }
+
+    // Validate file uploads (proofDocuments is optional)
+    const requiredFiles = ['investorId', 'beneficiaryId', 'passbook', 'paymentSlip', 'otherDocuments'];
+    const fileLabels = {
+        investorId: 'investor ID',
+        beneficiaryId: 'beneficiary ID',
+        passbook: 'passbook',
+        paymentSlip: 'payment slip',
+        otherDocuments: 'proposal form'
+    };
     let missingFiles = [];
     
     requiredFiles.forEach(fileId => {
         const fileInput = document.getElementById(fileId);
         if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
-            missingFiles.push(fileId.replace(/([A-Z])/g, ' $1').toLowerCase());
+            missingFiles.push(fileLabels[fileId] || fileId);
         }
     });
     
     if (missingFiles.length > 0) {
-        e.preventDefault();
-        showValidationError(`Please upload: ${missingFiles.join(', ')}`);
-        // Go to step 5 (file uploads)
-        document.querySelectorAll('.form-step').forEach(step => {
-            step.classList.remove('active');
-        });
-        const step5 = document.getElementById('step5');
-        if (step5) {
-            step5.classList.add('active');
-        }
-        currentStep = 5;
-        updateProgress();
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        const fileList = missingFiles.map(f => `<strong>${f}</strong>`).join(', ');
+        showValidationError(`The following required documents are missing (Step 5: Bank Details): ${fileList}. Please upload all required files before submitting.`);
+        goToStep(5);
+        return;
+    }
+
+    if (hasOversizedAttachment(document)) {
+        showValidationError('One or more uploaded files are too large (Step 5: Bank Details). Please ensure each file is within the allowed size limit and try again.');
+        goToStep(5);
         return;
     }
     
     // Validate declaration checkbox
     const declarationCheckbox = document.getElementById('declaration');
     if (!declarationCheckbox || !declarationCheckbox.checked) {
-        e.preventDefault();
-        showValidationError('You must accept the declaration.');
-        declarationCheckbox.focus();
+        showValidationError('You must check the <strong>declaration checkbox</strong> (Step 6: Declaration) to confirm that the information you provided is accurate and complete.');
+        goToStep(6);
+        if (declarationCheckbox) declarationCheckbox.focus();
+        return;
+    }
+
+    const salesPersonCodeInput = document.getElementById('salesPersonCode');
+    if (submitBtn) {
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Validating...';
+        submitBtn.disabled = true;
+    }
+
+    const salesCodeValid = await validateSalesPersonCode(salesPersonCodeInput ? salesPersonCodeInput.value : '');
+    if (!salesCodeValid) {
+        if (submitBtn) {
+            submitBtn.innerHTML = defaultSubmitHtml;
+            submitBtn.disabled = false;
+        }
+        goToStep(6);
+        if (salesPersonCodeInput) {
+            salesPersonCodeInput.focus();
+        }
         return;
     }
     
     // Show loading state
-    const submitBtn = document.querySelector('.submit-btn');
     if (submitBtn) {
         submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
         submitBtn.disabled = true;
     }
-    
-    // Allow form to submit normally
-    return true;
+
+    this.dataset.salesCodeValidated = '1';
+    this.submit();
 });
 
 // Initialize progress bar
@@ -368,32 +572,50 @@ document.addEventListener('DOMContentLoaded', function() {
         declarationDateInput.value = today;
     }
     
-    // Set maximum date for dob to 18 years ago
+    // Allow any date of birth up to and including today
     const dobInput = document.getElementById('dob');
     if (dobInput) {
-        const maxDate = new Date();
-        maxDate.setFullYear(maxDate.getFullYear() - 18);
-        dobInput.max = maxDate.toISOString().split('T')[0];
+        dobInput.max = today;
+    }
+
+    // Apply Person / Company labels from saved or default type
+    const applicantTypeInput = document.getElementById('applicantType');
+    setApplicantType(applicantTypeInput && applicantTypeInput.value === 'company' ? 'company' : 'person');
+
+    const salesPersonCodeInput = document.getElementById('salesPersonCode');
+    if (salesPersonCodeInput) {
+        salesPersonCodeInput.addEventListener('blur', async function() {
+            if (this.value.trim()) {
+                await validateSalesPersonCode(this.value);
+            }
+        });
+    }
+
+    const salesPersonCodeError = document.getElementById('salesPersonCodeError');
+    if (salesPersonCodeError && salesPersonCodeError.textContent.trim()) {
+        const salesInput = document.getElementById('salesPersonCode');
+        if (salesInput) {
+            salesInput.classList.add('input-error');
+        }
+        goToStep(6);
     }
     
     console.log('Form initialized successfully');
 
+});
 
-
-
-
-
-
-
-
-
-// Full name validation for block letters only
+// Full name validation for block letters only (person applicants)
 function validateFullName(name) {
     // Remove extra spaces and check if it's valid
     const trimmedName = name.trim();
     const blockLettersRegex = /^[A-Z\s]+$/;
     
     return blockLettersRegex.test(trimmedName) && trimmedName.length >= 2;
+}
+
+function isCompanyApplicant() {
+    const typeInput = document.getElementById('applicantType');
+    return typeInput && typeInput.value === 'company';
 }
 
 // Add event listener for full name validation
@@ -405,15 +627,16 @@ document.addEventListener('DOMContentLoaded', function() {
         fullNameInput.addEventListener('blur', function() {
             this.value = this.value.toUpperCase();
             
-            // Validate format
-            if (this.value.trim() && !validateFullName(this.value)) {
+            // Validate format for person applicants only
+            if (!isCompanyApplicant() && this.value.trim() && !validateFullName(this.value)) {
                 showValidationError('Full name should contain only uppercase letters (A-Z) and spaces');
                 this.focus();
             }
         });
         
-        // Prevent invalid key presses
+        // Prevent invalid key presses for person applicants only
         fullNameInput.addEventListener('keypress', function(e) {
+            if (isCompanyApplicant()) return;
             const char = String.fromCharCode(e.which);
             // Allow only letters and space
             if (!/[A-Z\s]/i.test(char)) {
@@ -424,16 +647,111 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Format the name as user types
         fullNameInput.addEventListener('input', function() {
+            if (isCompanyApplicant()) {
+                this.value = this.value.toUpperCase();
+                return;
+            }
             // Remove any non-letter characters except spaces
             this.value = this.value.replace(/[^A-Z\s]/gi, '');
             // Convert to uppercase
             this.value = this.value.toUpperCase();
         });
     }
+
+    const personBtn = document.getElementById('applicantTypePerson');
+    const companyBtn = document.getElementById('applicantTypeCompany');
+    if (personBtn) {
+        personBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            setApplicantType('person');
+        });
+    }
+    if (companyBtn) {
+        companyBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            setApplicantType('company');
+        });
+    }
+
+    const investmentTypeSelect = document.getElementById('investmentType');
+    const gspPlanSelect = document.getElementById('gspPlan');
+    const gspPaymentSelect = document.getElementById('gspPaymentOption');
+    if (investmentTypeSelect) {
+        investmentTypeSelect.addEventListener('change', updateGspPlanFields);
+    }
+    if (gspPlanSelect) {
+        gspPlanSelect.addEventListener('change', updateGspPlanFields);
+    }
+    if (gspPaymentSelect) {
+        gspPaymentSelect.addEventListener('change', updateGspPlanFields);
+    }
+    updateGspPlanFields();
 });
 
+const GSP_PLAN1_OPTIONS = {
+    one_time: { investment: 200000, maturity: 1000000 }
+};
 
+function updateGspPlanFields() {
+    const investmentType = document.getElementById('investmentType');
+    const gspPlanGroup = document.getElementById('gspPlanGroup');
+    const gspPaymentGroup = document.getElementById('gspPaymentGroup');
+    const gspMaturityGroup = document.getElementById('gspMaturityGroup');
+    const gspPlan = document.getElementById('gspPlan');
+    const gspPaymentOption = document.getElementById('gspPaymentOption');
+    const investmentAmount = document.getElementById('investmentAmount');
+    const maturityAmount = document.getElementById('maturityAmount');
 
+    if (!investmentType || !gspPlanGroup || !gspPaymentGroup || !gspPlan || !gspPaymentOption) {
+        return;
+    }
 
-    
-});
+    const isGsp = investmentType.value === 'GSP';
+    gspPlanGroup.style.display = isGsp ? '' : 'none';
+
+    if (!isGsp) {
+        gspPlan.value = '';
+        gspPlan.removeAttribute('required');
+        gspPaymentOption.value = '';
+        gspPaymentOption.removeAttribute('required');
+        gspPaymentGroup.style.display = 'none';
+        if (gspMaturityGroup) gspMaturityGroup.style.display = 'none';
+        if (maturityAmount) maturityAmount.value = '';
+        if (investmentAmount) investmentAmount.readOnly = false;
+        return;
+    }
+
+    gspPlan.setAttribute('required', 'required');
+
+    const isPlan1 = gspPlan.value === 'plan1';
+    gspPaymentGroup.style.display = isPlan1 ? '' : 'none';
+
+    if (isPlan1) {
+        gspPaymentOption.setAttribute('required', 'required');
+    } else {
+        gspPaymentOption.value = '';
+        gspPaymentOption.removeAttribute('required');
+        if (gspMaturityGroup) gspMaturityGroup.style.display = 'none';
+        if (maturityAmount) maturityAmount.value = '';
+        if (investmentAmount) investmentAmount.readOnly = false;
+        return;
+    }
+
+    const selectedOption = GSP_PLAN1_OPTIONS[gspPaymentOption.value];
+    if (selectedOption) {
+        if (investmentAmount) {
+            investmentAmount.value = selectedOption.investment;
+            investmentAmount.readOnly = true;
+        }
+        if (maturityAmount) {
+            maturityAmount.value = selectedOption.maturity;
+        }
+        if (gspMaturityGroup) {
+            gspMaturityGroup.style.display = '';
+        }
+    } else {
+        if (investmentAmount) investmentAmount.readOnly = false;
+        if (maturityAmount) maturityAmount.value = '';
+        if (gspMaturityGroup) gspMaturityGroup.style.display = 'none';
+    }
+}

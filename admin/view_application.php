@@ -2,10 +2,12 @@
 session_start();
 require_once '../config.php';
 require_once '../db.php';
+require_once '../includes/application_helpers.php';
+require_once __DIR__ . '/../includes/approval_email.php';
 
 
-// Check if user is logged in as admin OR approver
-if (!isset($_SESSION['admin_id']) && !isset($_SESSION['approver_id'])) {
+// Check if user is logged in as admin or approver
+if (!isset($_SESSION['user_id']) && !isset($_SESSION['approver_id'])) {
     header('Location: index.php');
     exit();
 }
@@ -36,18 +38,19 @@ if ($isApprover) {
         $userData = [];
     }
 } else {
-    // Admin login
-    $userId = $_SESSION['admin_id'];
-    $username = $_SESSION['admin_name'] ?? 'Admin';
-    $fullName = $_SESSION['admin_name'] ?? 'Admin';
-    $userType = $_SESSION['admin_role'] ?? 'admin';
+    // Admin/User login
+    $userId = $_SESSION['user_id'];
+    $username = $_SESSION['username'] ?? 'User';
+    $fullName = $_SESSION['full_name'] ?? $username;
+    $userType = $_SESSION['user_type'] ?? 'user';
     $approverLevel = 0; // Admin has no approver level
     
-    // Fetch additional admin data
+    // Fetch additional user data
     try {
         $stmt = $db->prepare("
-            SELECT email, role, last_login
-            FROM admin_users 
+            SELECT email, user_type, status, last_login, 
+                   DATE_FORMAT(created_at, '%M %d, %Y') as join_date
+            FROM users 
             WHERE id = ?
         ");
         $stmt->execute([$userId]);
@@ -57,14 +60,139 @@ if ($isApprover) {
     }
 }
 
+$investmentTypeNames = [
+    'HPP' => 'High profit plan',
+    'GSP' => 'Green saving plan',
+    'GSI' => 'Green silver plan',
+    'GOLD' => 'Gold plan',
+    'SFPS' => 'Seraa farm profit share plan',
+    'SFHPS' => 'Seraa farm high profit share plan'
+];
+$canEditAgreementNo = (!$isApprover && $userType === 'admin')
+    || ($isApprover && (int)$approverLevel === 1);
+
+$applicationAttachmentFields = [
+    'investor_id_doc' => ['label' => 'Investor ID', 'icon' => 'fas fa-id-card'],
+    'beneficiary_id_doc' => ['label' => 'Beneficiary ID', 'icon' => 'fas fa-id-card-clip'],
+    'passbook_doc' => ['label' => 'Passbook', 'icon' => 'fas fa-book'],
+    'payment_slip_doc' => ['label' => 'Payment Slip', 'icon' => 'fas fa-receipt'],
+    'proof_documents' => ['label' => 'Proof Documents', 'icon' => 'fas fa-file-circle-check'],
+    'other_documents' => ['label' => 'Proposal Form', 'icon' => 'fas fa-file-lines'],
+];
+
+function canAdminReplaceAttachments($isApprover, $userType) {
+    return !$isApprover && $userType === 'admin';
+}
+
+function canSecondApproverReplaceAttachments($isApprover, $sessionApproverLevel, $status) {
+    return $isApprover
+        && (int)$sessionApproverLevel === 2
+        && !in_array($status, ['approved', 'rejected'], true);
+}
+
+function canStaffReplaceAttachments($db, $isApprover, $userType, $userId, $status, $approverLevel) {
+    if ($isApprover || $userType !== 'staff') {
+        return false;
+    }
+
+    if (!isBeforeFirstApproval($status, $approverLevel)) {
+        return false;
+    }
+
+    return userHasPermissionKey($db, $userId, 'replace_uploads', $userType);
+}
+
+function canReplaceApplicationAttachments($db, $isApprover, $userType, $userId, $status, $approverLevel, $sessionApproverLevel = 0) {
+    if (canAdminReplaceAttachments($isApprover, $userType)) {
+        return true;
+    }
+
+    if (canSecondApproverReplaceAttachments($isApprover, $sessionApproverLevel, $status)) {
+        return true;
+    }
+
+    return canStaffReplaceAttachments($db, $isApprover, $userType, $userId, $status, $approverLevel);
+}
+
+function canApproverEditApplicationDetails($isApprover, $status) {
+    return $isApprover && !in_array($status, ['approved', 'rejected'], true);
+}
+
+function canStaffEditApplicationDetails($isApprover, $userType, $status, $approverLevel) {
+    return !$isApprover
+        && $userType === 'staff'
+        && isBeforeFirstApproval($status, $approverLevel);
+}
+
+function canEditApplicationDetailsNow($isApprover, $userType, $status, $approverLevel) {
+    return canApproverEditApplicationDetails($isApprover, $status)
+        || canStaffEditApplicationDetails($isApprover, $userType, $status, $approverLevel);
+}
+
+function getApplicationEditPermissionError($db, $isApprover, $userType, $applicationId) {
+    $stmt = $db->prepare('SELECT status, COALESCE(approver_level, 1) AS approver_level FROM investors WHERE id = ?');
+    $stmt->execute([$applicationId]);
+    $row = $stmt->fetch();
+
+    if (!$row) {
+        return 'Application not found.';
+    }
+
+    $status = $row['status'] ?? '';
+    $approverLevel = (int)($row['approver_level'] ?? 1);
+
+    if (canEditApplicationDetailsNow($isApprover, $userType, $status, $approverLevel)) {
+        return null;
+    }
+
+    if ($isApprover) {
+        return 'Cannot edit details for approved or rejected applications.';
+    }
+
+    if ($userType === 'staff') {
+        return 'Staff can edit application details only before the first approver has approved.';
+    }
+
+    return 'You do not have permission to edit application details.';
+}
+
+function getApproverEditPermissionError($db, $isApprover, $applicationId) {
+    return getApplicationEditPermissionError($db, $isApprover, 'approver', $applicationId);
+}
+
 $applicationId = $_GET['id'] ?? 0;
+
+// Preserve applications list page/filter so Back returns to the same page
+$returnPage = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
+$returnFilter = $_GET['filter'] ?? 'all';
+$allowedReturnFilters = ['all', 'pending', 'in_progress', 'approved', 'rejected'];
+if (!in_array($returnFilter, $allowedReturnFilters, true)) {
+    $returnFilter = 'all';
+}
+$returnSearch = trim($_GET['search'] ?? '');
+$returnBranch = trim($_GET['branch'] ?? '');
+
+$applicationsReturnParts = ['page=' . $returnPage, 'filter=' . urlencode($returnFilter)];
+if ($returnSearch !== '') {
+    $applicationsReturnParts[] = 'search=' . urlencode($returnSearch);
+}
+if ($returnBranch !== '') {
+    $applicationsReturnParts[] = 'branch=' . urlencode($returnBranch);
+}
+$applicationsReturnUrl = 'applications.php?' . implode('&', $applicationsReturnParts);
+$viewSelfQuery = 'id=' . urlencode((string)$applicationId) . '&' . implode('&', $applicationsReturnParts);
+
 if (!$applicationId) {
-    header('Location: applications.php');
+    header('Location: ' . $applicationsReturnUrl);
     exit();
 }
 
 $error = '';
 $success = '';
+if (!empty($_SESSION['legacy_investment_success'])) {
+    $success = $_SESSION['legacy_investment_success'];
+    unset($_SESSION['legacy_investment_success']);
+}
 $currentApproverLevel = 1;
 
 // Handle status update with 3-tier approval system
@@ -73,18 +201,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $newStatus = $_POST['status'] ?? '';
         $adminNotes = $_POST['admin_notes'] ?? '';
         
-        // Use appropriate name based on login type
-        if ($isApprover) {
-            $adminName = $_SESSION['approver_name'] ?? 'Approver';
+        // Only logged-in approvers can submit approval actions
+        if (!$isApprover) {
+            $error = "Only assigned approvers can approve, reject, or forward applications.";
         } else {
-            $adminName = $_SESSION['admin_name'] ?? 'Admin';
-        }
+        // Use appropriate name based on login type
+        $adminName = $_SESSION['approver_name'] ?? 'Approver';
         
-        $approverLevel = $_POST['approver_level'] ?? $currentApproverLevel;
+        // Always use session level — do not trust posted approver_level
+        $approverLevel = (int)($_SESSION['approver_level'] ?? 0);
         $nextAction = $_POST['next_action'] ?? ''; // 'approve', 'reject', 'send_to_next'
         
-        // Validate action
-        if (empty($nextAction)) {
+        // Ensure this approver is assigned to the application's current level
+        $levelCheckStmt = $db->prepare("SELECT approver_level, status FROM investors WHERE id = ?");
+        $levelCheckStmt->execute([$applicationId]);
+        $levelCheckRow = $levelCheckStmt->fetch();
+        $appCurrentLevel = (int)($levelCheckRow['approver_level'] ?? 0);
+        $appStatus = $levelCheckRow['status'] ?? '';
+
+        if (!$levelCheckRow) {
+            $error = "Application not found.";
+        } elseif (in_array($appStatus, ['approved', 'rejected'], true)) {
+            $error = "This application has already been " . $appStatus . ".";
+        } elseif ($approverLevel !== $appCurrentLevel) {
+            $error = "You are Level $approverLevel Approver, but this application requires Level $appCurrentLevel approval.";
+        } elseif (empty($nextAction)) {
             $error = "Please select an action (Approve, Reject, or Send to Next Approver)";
         } else {
             try {
@@ -202,11 +343,37 @@ if (isset($_FILES['approver_file']) && $_FILES['approver_file']['error'] === UPL
                 ]);
                 
                 $db->commit();
+
+                // Notify next approver when application moves to the next approval level
+                if (
+                    in_array($nextAction, ['approve', 'send_to_next'], true)
+                    && $nextApproverLevel > $approverLevel
+                    && $nextApproverLevel <= 3
+                    && $finalStatus !== 'rejected'
+                ) {
+                    try {
+                        $notified = sendApproverLevelEmail(
+                            $db,
+                            (int) $applicationId,
+                            (int) $nextApproverLevel,
+                            'level_approved'
+                        );
+                        if (function_exists('debug_log')) {
+                            debug_log('Next approver notification', array(
+                                'sent_count' => $notified,
+                                'level' => $nextApproverLevel,
+                                'application_id' => $applicationId,
+                            ));
+                        }
+                    } catch (Exception $e) {
+                        error_log('Next approver notification failed: ' . $e->getMessage());
+                    }
+                }
                 
                 $success = "Application status updated. " . $actionDescription;
                 
-                // Refresh the page to show updated data
-                header("Refresh: 2; url=view_application.php?id=" . $applicationId);
+                // Refresh the page to show updated data (keep list return params)
+                header("Refresh: 2; url=view_application.php?" . $viewSelfQuery);
                 exit();
                 
             } catch (Exception $e) {
@@ -214,6 +381,7 @@ if (isset($_FILES['approver_file']) && $_FILES['approver_file']['error'] === UPL
                 $error = "Failed to update status: " . $e->getMessage();
             }
         }
+        } // end approver-only branch
     }
     
     // Handle notes auto-save
@@ -254,34 +422,521 @@ if (isset($_FILES['approver_file']) && $_FILES['approver_file']['error'] === UPL
         header("Location: download_full_application.php?id=" . $applicationId);
         exit();
     }
+
+    // Handle agreement number update
+    if (isset($_POST['update_agreement_no'])) {
+        if (!$canEditAgreementNo) {
+            $error = 'You do not have permission to edit the agreement number.';
+        } else {
+            $newAgreementNo = trim($_POST['agreement_no'] ?? '');
+
+            if ($newAgreementNo === '') {
+                $error = 'Please enter an agreement number.';
+            } elseif (strlen($newAgreementNo) > 50) {
+                $error = 'Agreement number must be 50 characters or fewer.';
+            } else {
+                try {
+                    $checkStmt = $db->prepare("SELECT agreement_no FROM investors WHERE id = ?");
+                    $checkStmt->execute([$applicationId]);
+                    $currentRow = $checkStmt->fetch();
+
+                    if (!$currentRow) {
+                        $error = 'Application not found.';
+                    } else {
+                        $oldAgreementNo = trim((string)($currentRow['agreement_no'] ?? ''));
+
+                        if ($oldAgreementNo === $newAgreementNo) {
+                            $success = 'Agreement number is already set to ' . $newAgreementNo . '.';
+                        } else {
+                            $dupStmt = $db->prepare("
+                                SELECT id
+                                FROM investors
+                                WHERE agreement_no = ? AND id != ?
+                                LIMIT 1
+                            ");
+                            $dupStmt->execute([$newAgreementNo, $applicationId]);
+
+                            if ($dupStmt->fetch()) {
+                                $error = 'This agreement number is already assigned to another investor.';
+                            } else {
+                                if ($isApprover) {
+                                    $editorName = $_SESSION['approver_name'] ?? 'Approver';
+                                } else {
+                                    $editorName = $_SESSION['full_name'] ?? $_SESSION['username'] ?? 'Admin';
+                                }
+
+                                $db->beginTransaction();
+
+                                $updateStmt = $db->prepare("
+                                    UPDATE investors
+                                    SET agreement_no = :agreement_no,
+                                        updated_at = NOW()
+                                    WHERE id = :id
+                                ");
+                                $updateStmt->execute([
+                                    ':agreement_no' => $newAgreementNo,
+                                    ':id' => $applicationId
+                                ]);
+
+                                $syncStmt = $db->prepare("
+                                    UPDATE agreements
+                                    SET agreement_number = :agreement_number,
+                                        updated_at = NOW()
+                                    WHERE investor_id = :investor_id
+                                ");
+                                $syncStmt->execute([
+                                    ':agreement_number' => $newAgreementNo,
+                                    ':investor_id' => $applicationId
+                                ]);
+
+                                $logStmt = $db->prepare("
+                                    INSERT INTO application_logs (investor_id, action, description, performed_by)
+                                    VALUES (:investor_id, :action, :description, :performed_by)
+                                ");
+                                $logDescription = $oldAgreementNo === ''
+                                    ? "Agreement number set to {$newAgreementNo}"
+                                    : "Agreement number changed from {$oldAgreementNo} to {$newAgreementNo}";
+                                $logStmt->execute([
+                                    ':investor_id' => $applicationId,
+                                    ':action' => 'agreement_no_updated',
+                                    ':description' => $logDescription,
+                                    ':performed_by' => $editorName
+                                ]);
+
+                                $db->commit();
+                                $success = 'Agreement number saved: ' . $newAgreementNo . '.';
+                            }
+                        }
+                    }
+                } catch (PDOException $e) {
+                    if ($db->inTransaction()) {
+                        $db->rollBack();
+                    }
+                    $error = 'Failed to save agreement number: ' . $e->getMessage();
+                }
+            }
+        }
+    }
+
+    // Handle approver/staff edits to application details
+    if (isset($_POST['update_personal_info'])) {
+        $permError = getApplicationEditPermissionError($db, $isApprover, $userType, $applicationId);
+        if ($permError) {
+            $error = $permError;
+        } else {
+            $fullName = trim($_POST['full_name'] ?? '');
+            $nameWithInitials = trim($_POST['name_with_initials'] ?? '');
+            $nicNo = trim($_POST['nic_no'] ?? '');
+            $telNo = trim($_POST['tel_no'] ?? '');
+            $dob = trim($_POST['dob'] ?? '');
+            $email = trim($_POST['email'] ?? '');
+            $address = trim($_POST['address'] ?? '');
+
+            if ($fullName === '' || $nameWithInitials === '' || $nicNo === '' || $telNo === '' || $dob === '' || $address === '') {
+                $error = 'Please fill in all required personal information fields.';
+            } elseif ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $error = 'Please enter a valid email address.';
+            } else {
+                try {
+                    $editorName = $isApprover
+                        ? ($_SESSION['approver_name'] ?? 'Approver')
+                        : ($_SESSION['full_name'] ?? $_SESSION['username'] ?? 'Staff');
+                    $updateStmt = $db->prepare('
+                        UPDATE investors
+                        SET full_name = :full_name,
+                            name_with_initials = :name_with_initials,
+                            nic_no = :nic_no,
+                            tel_no = :tel_no,
+                            dob = :dob,
+                            email = :email,
+                            address = :address,
+                            updated_at = NOW()
+                        WHERE id = :id
+                    ');
+                    $updateStmt->execute([
+                        ':full_name' => $fullName,
+                        ':name_with_initials' => $nameWithInitials,
+                        ':nic_no' => $nicNo,
+                        ':tel_no' => $telNo,
+                        ':dob' => $dob,
+                        ':email' => $email,
+                        ':address' => $address,
+                        ':id' => $applicationId
+                    ]);
+
+                    $logStmt = $db->prepare('
+                        INSERT INTO application_logs (investor_id, action, description, performed_by)
+                        VALUES (:investor_id, :action, :description, :performed_by)
+                    ');
+                    $logStmt->execute([
+                        ':investor_id' => $applicationId,
+                        ':action' => 'personal_info_updated',
+                        ':description' => 'Personal information updated by ' . ($isApprover ? 'approver' : 'staff'),
+                        ':performed_by' => $editorName
+                    ]);
+
+                    $success = 'Personal information updated successfully.';
+                } catch (PDOException $e) {
+                    $error = 'Failed to update personal information: ' . $e->getMessage();
+                }
+            }
+        }
+    }
+
+    if (isset($_POST['update_professional_info'])) {
+        $permError = getApplicationEditPermissionError($db, $isApprover, $userType, $applicationId);
+        if ($permError) {
+            $error = $permError;
+        } else {
+            $occupation = trim($_POST['occupation'] ?? '');
+            $employerName = trim($_POST['employer_name'] ?? '');
+            $years = (int)($_POST['years'] ?? 0);
+            $investmentAmount = trim($_POST['investment_amount'] ?? '');
+            $investmentType = trim($_POST['investment_type'] ?? '');
+            $signingDate = trim($_POST['signing_date'] ?? '');
+            $allowedTypes = array_keys($investmentTypeNames);
+
+            if ($occupation === '' || $employerName === '' || $years <= 0 || $signingDate === '') {
+                $error = 'Please fill in all required professional information fields.';
+            } elseif ($investmentType !== '' && !in_array($investmentType, $allowedTypes, true)) {
+                $error = 'Please select a valid investment type.';
+            } elseif ($investmentAmount !== '' && !is_numeric($investmentAmount)) {
+                $error = 'Investment amount must be a valid number.';
+            } else {
+                try {
+                    $editorName = $isApprover
+                        ? ($_SESSION['approver_name'] ?? 'Approver')
+                        : ($_SESSION['full_name'] ?? $_SESSION['username'] ?? 'Staff');
+                    $updateStmt = $db->prepare('
+                        UPDATE investors
+                        SET occupation = :occupation,
+                            employer_name = :employer_name,
+                            years = :years,
+                            investment_amount = :investment_amount,
+                            investment_type = :investment_type,
+                            signing_date = :signing_date,
+                            updated_at = NOW()
+                        WHERE id = :id
+                    ');
+                    $updateStmt->execute([
+                        ':occupation' => $occupation,
+                        ':employer_name' => $employerName,
+                        ':years' => $years,
+                        ':investment_amount' => $investmentAmount !== '' ? $investmentAmount : null,
+                        ':investment_type' => $investmentType !== '' ? $investmentType : null,
+                        ':signing_date' => $signingDate,
+                        ':id' => $applicationId
+                    ]);
+
+                    $logStmt = $db->prepare('
+                        INSERT INTO application_logs (investor_id, action, description, performed_by)
+                        VALUES (:investor_id, :action, :description, :performed_by)
+                    ');
+                    $logStmt->execute([
+                        ':investor_id' => $applicationId,
+                        ':action' => 'professional_info_updated',
+                        ':description' => 'Professional information updated by ' . ($isApprover ? 'approver' : 'staff'),
+                        ':performed_by' => $editorName
+                    ]);
+
+                    $success = 'Professional information updated successfully.';
+                } catch (PDOException $e) {
+                    $error = 'Failed to update professional information: ' . $e->getMessage();
+                }
+            }
+        }
+    }
+
+    if (isset($_POST['update_bank_details'])) {
+        $permError = getApplicationEditPermissionError($db, $isApprover, $userType, $applicationId);
+        if ($permError) {
+            $error = $permError;
+        } else {
+            $accountNo = trim($_POST['account_no'] ?? '');
+            $bankName = trim($_POST['bank_name'] ?? '');
+            $branchName = trim($_POST['branch_name'] ?? '');
+            $declarationDate = trim($_POST['declaration_date'] ?? '');
+
+            if ($accountNo === '' || $bankName === '' || $branchName === '' || $declarationDate === '') {
+                $error = 'Please fill in all required bank detail fields.';
+            } else {
+                try {
+                    $editorName = $isApprover
+                        ? ($_SESSION['approver_name'] ?? 'Approver')
+                        : ($_SESSION['full_name'] ?? $_SESSION['username'] ?? 'Staff');
+                    $updateStmt = $db->prepare('
+                        UPDATE investors
+                        SET account_no = :account_no,
+                            bank_name = :bank_name,
+                            branch_name = :branch_name,
+                            declaration_date = :declaration_date,
+                            updated_at = NOW()
+                        WHERE id = :id
+                    ');
+                    $updateStmt->execute([
+                        ':account_no' => $accountNo,
+                        ':bank_name' => $bankName,
+                        ':branch_name' => $branchName,
+                        ':declaration_date' => $declarationDate,
+                        ':id' => $applicationId
+                    ]);
+
+                    $logStmt = $db->prepare('
+                        INSERT INTO application_logs (investor_id, action, description, performed_by)
+                        VALUES (:investor_id, :action, :description, :performed_by)
+                    ');
+                    $logStmt->execute([
+                        ':investor_id' => $applicationId,
+                        ':action' => 'bank_details_updated',
+                        ':description' => 'Bank details updated by ' . ($isApprover ? 'approver' : 'staff'),
+                        ':performed_by' => $editorName
+                    ]);
+
+                    $success = 'Bank details updated successfully.';
+                } catch (PDOException $e) {
+                    $error = 'Failed to update bank details: ' . $e->getMessage();
+                }
+            }
+        }
+    }
+
+    if (isset($_POST['update_beneficiaries'])) {
+        $permError = getApplicationEditPermissionError($db, $isApprover, $userType, $applicationId);
+        if ($permError) {
+            $error = $permError;
+        } else {
+            $beneficiaryNames = $_POST['beneficiary_name'] ?? [];
+            $beneficiaryNics = $_POST['beneficiary_nic'] ?? [];
+            $beneficiaryPercentages = $_POST['beneficiary_percentage'] ?? [];
+
+            if (!is_array($beneficiaryNames) || count($beneficiaryNames) === 0) {
+                $error = 'Please add at least one beneficiary.';
+            } else {
+                $totalPercentage = 0;
+                $beneficiaryRows = [];
+
+                foreach ($beneficiaryNames as $index => $name) {
+                    $beneficiaryName = trim((string)$name);
+                    $beneficiaryNic = trim((string)($beneficiaryNics[$index] ?? ''));
+                    $percentage = (int)($beneficiaryPercentages[$index] ?? 0);
+
+                    if ($beneficiaryName === '' || $beneficiaryNic === '' || $percentage <= 0) {
+                        $error = 'Each beneficiary must have a name, NIC, and a percentage greater than 0.';
+                        break;
+                    }
+
+                    $totalPercentage += $percentage;
+                    $beneficiaryRows[] = [
+                        'beneficiary_name' => $beneficiaryName,
+                        'beneficiary_nic' => $beneficiaryNic,
+                        'percentage' => $percentage
+                    ];
+                }
+
+                if (!$error && $totalPercentage !== 100) {
+                    $error = 'Beneficiary percentages must total exactly 100%.';
+                }
+
+                if (!$error) {
+                    try {
+                        $editorName = $isApprover
+                            ? ($_SESSION['approver_name'] ?? 'Approver')
+                            : ($_SESSION['full_name'] ?? $_SESSION['username'] ?? 'Staff');
+                        $db->beginTransaction();
+
+                        $deleteStmt = $db->prepare('DELETE FROM beneficiaries WHERE investor_id = ?');
+                        $deleteStmt->execute([$applicationId]);
+
+                        $insertStmt = $db->prepare('
+                            INSERT INTO beneficiaries (investor_id, beneficiary_name, beneficiary_nic, percentage)
+                            VALUES (:investor_id, :beneficiary_name, :beneficiary_nic, :percentage)
+                        ');
+
+                        foreach ($beneficiaryRows as $row) {
+                            $insertStmt->execute([
+                                ':investor_id' => $applicationId,
+                                ':beneficiary_name' => $row['beneficiary_name'],
+                                ':beneficiary_nic' => $row['beneficiary_nic'],
+                                ':percentage' => $row['percentage']
+                            ]);
+                        }
+
+                        $updateStmt = $db->prepare('UPDATE investors SET updated_at = NOW() WHERE id = ?');
+                        $updateStmt->execute([$applicationId]);
+
+                        $logStmt = $db->prepare('
+                            INSERT INTO application_logs (investor_id, action, description, performed_by)
+                            VALUES (:investor_id, :action, :description, :performed_by)
+                        ');
+                        $logStmt->execute([
+                            ':investor_id' => $applicationId,
+                            ':action' => 'beneficiaries_updated',
+                            ':description' => 'Beneficiary details updated by ' . ($isApprover ? 'approver' : 'staff'),
+                            ':performed_by' => $editorName
+                        ]);
+
+                        $db->commit();
+                        $success = 'Beneficiary details updated successfully.';
+                    } catch (PDOException $e) {
+                        if ($db->inTransaction()) {
+                            $db->rollBack();
+                        }
+                        $error = 'Failed to update beneficiary details: ' . $e->getMessage();
+                    }
+                }
+            }
+        }
+    }
+
+    // Handle attachment replace (admins anytime; second approver until final decision; staff with permission only before first approval)
+    if (isset($_POST['replace_attachment'])) {
+        try {
+            $appStmt = $db->prepare("SELECT status, COALESCE(approver_level, 1) AS approver_level FROM investors WHERE id = ?");
+            $appStmt->execute([$applicationId]);
+            $appRow = $appStmt->fetch();
+
+            if (!$appRow) {
+                $error = 'Application not found.';
+            } elseif (!canReplaceApplicationAttachments(
+                $db,
+                $isApprover,
+                $userType,
+                $userId,
+                $appRow['status'] ?? '',
+                (int)($appRow['approver_level'] ?? 1),
+                (int)$approverLevel
+            )) {
+                if ($userType === 'staff') {
+                    $error = 'You can replace uploads only before the first approver has approved, and only if that permission is granted.';
+                } elseif ($isApprover) {
+                    $error = 'Only the second approver can replace attachments, and only before the application is approved or rejected.';
+                } else {
+                    $error = 'Only system administrators can replace application attachments.';
+                }
+            } else {
+            $attachmentField = $_POST['attachment_field'] ?? '';
+
+                if (!array_key_exists($attachmentField, $applicationAttachmentFields)) {
+                    $error = 'Invalid attachment field.';
+                } elseif (!isset($_FILES['attachment_file']) || $_FILES['attachment_file']['error'] !== UPLOAD_ERR_OK) {
+                    $error = 'Please select a file to upload.';
+                } else {
+                    $uploadFile = $_FILES['attachment_file'];
+                    $fieldLabel = $applicationAttachmentFields[$attachmentField]['label'];
+
+                    if ($uploadFile['size'] > MAX_FILE_SIZE) {
+                        $error = 'Invalid file attachment';
+                    } else {
+                        $fileExt = strtolower(pathinfo($uploadFile['name'], PATHINFO_EXTENSION));
+                        if (!in_array($fileExt, ALLOWED_FILE_TYPES, true)) {
+                            $error = "{$fieldLabel} must be JPG, JPEG, PNG, or PDF.";
+                        } else {
+                            $fileName = uniqid() . '_' . time() . '_' . preg_replace('/[^a-zA-Z0-9\.]/', '_', $uploadFile['name']);
+                            $uploadDir = '../uploads/';
+                            $destination = $uploadDir . $fileName;
+
+                            if (!is_dir($uploadDir)) {
+                                mkdir($uploadDir, 0777, true);
+                            }
+
+                            $oldStmt = $db->prepare("SELECT {$attachmentField} FROM investors WHERE id = ?");
+                            $oldStmt->execute([$applicationId]);
+                            $oldRow = $oldStmt->fetch();
+                            $oldFileName = trim((string)($oldRow[$attachmentField] ?? ''));
+
+                            if (move_uploaded_file($uploadFile['tmp_name'], $destination)) {
+                                $updateSql = "UPDATE investors SET {$attachmentField} = :file_name, updated_at = NOW() WHERE id = :id";
+                                $updateStmt = $db->prepare($updateSql);
+                                $updateStmt->execute([
+                                    ':file_name' => $fileName,
+                                    ':id' => $applicationId
+                                ]);
+
+                                if ($oldFileName !== '' && $oldFileName !== $fileName) {
+                                    $oldPath = $uploadDir . $oldFileName;
+                                    if (is_file($oldPath)) {
+                                        @unlink($oldPath);
+                                    }
+                                }
+
+                                $editorName = $_SESSION['full_name'] ?? $_SESSION['username'] ?? 'Admin';
+                                $actorLabel = $userType === 'staff' ? 'staff' : 'admin';
+                                $logStmt = $db->prepare("
+                                    INSERT INTO application_logs (investor_id, action, description, performed_by)
+                                    VALUES (:investor_id, :action, :description, :performed_by)
+                                ");
+                                $logDescription = $oldFileName === ''
+                                    ? "{$fieldLabel} uploaded by {$actorLabel}"
+                                    : "{$fieldLabel} replaced by {$actorLabel} (was: {$oldFileName})";
+                                $logStmt->execute([
+                                    ':investor_id' => $applicationId,
+                                    ':action' => 'attachment_replaced',
+                                    ':description' => $logDescription,
+                                    ':performed_by' => $editorName
+                                ]);
+
+                                $success = $oldFileName === ''
+                                    ? "{$fieldLabel} uploaded successfully."
+                                    : "{$fieldLabel} replaced successfully.";
+                            } else {
+                                $error = 'Failed to upload the replacement file.';
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (PDOException $e) {
+            $error = 'Failed to replace attachment: ' . $e->getMessage();
+        }
+    }
 }
 // ... continue with the rest of your code ...
 
 // Get application details with approver information
 try {
     $stmt = $db->prepare("
-        SELECT *, 
-               DATE_FORMAT(created_at, '%M %d, %Y %H:%i') as formatted_created,
-               DATE_FORMAT(updated_at, '%M %d, %Y %H:%i') as formatted_updated,
-               DATE_FORMAT(reviewed_at, '%M %d, %Y %H:%i') as formatted_reviewed,
-               DATE_FORMAT(dob, '%M %d, %Y') as formatted_dob,
-               DATE_FORMAT(signing_date, '%M %d, %Y') as formatted_signing,
-               DATE_FORMAT(declaration_date, '%M %d, %Y') as formatted_declaration,
-               COALESCE(approver_level, 1) as approver_level,
-               current_approver
-        FROM investors 
-        WHERE id = ?
+        SELECT i.*, 
+               DATE_FORMAT(i.created_at, '%M %d, %Y %H:%i') as formatted_created,
+               DATE_FORMAT(i.updated_at, '%M %d, %Y %H:%i') as formatted_updated,
+               DATE_FORMAT(i.reviewed_at, '%M %d, %Y %H:%i') as formatted_reviewed,
+               DATE_FORMAT(i.dob, '%M %d, %Y') as formatted_dob,
+               DATE_FORMAT(i.signing_date, '%M %d, %Y') as formatted_signing,
+               DATE_FORMAT(i.declaration_date, '%M %d, %Y') as formatted_declaration,
+               COALESCE(i.approver_level, 1) as approver_level,
+               i.current_approver,
+               sp.name AS sales_person_name,
+               sp.branch AS sales_person_branch
+        FROM investors i
+        LEFT JOIN sales_persons sp ON sp.sales_code = i.sales_person_code
+        WHERE i.id = ?
     ");
     $stmt->execute([$applicationId]);
     $application = $stmt->fetch();
     
     if (!$application) {
-        header('Location: applications.php');
+        header('Location: ' . $applicationsReturnUrl);
         exit();
     }
+
+    $applicationReference = buildApplicationRef($applicationId, $application['investment_type'] ?? '');
     
     // Set current approver level
     $currentApproverLevel = $application['approver_level'] ?? 1;
+    $canReplaceAttachments = canReplaceApplicationAttachments(
+        $db,
+        $isApprover,
+        $userType,
+        $userId,
+        $application['status'] ?? '',
+        (int)$currentApproverLevel,
+        (int)$approverLevel
+    );
+    $canEditApplicationDetails = canEditApplicationDetailsNow(
+        $isApprover,
+        $userType,
+        $application['status'] ?? '',
+        (int)$currentApproverLevel
+    );
     
     // Get beneficiaries
     $stmt = $db->prepare("SELECT * FROM beneficiaries WHERE investor_id = ? ORDER BY percentage DESC");
@@ -1101,6 +1756,88 @@ try {
             justify-content: center;
             color: var(--accent);
         }
+
+        .btn-section-edit {
+            margin-left: auto;
+            background: rgba(34, 197, 94, 0.15);
+            border: 1px solid rgba(34, 197, 94, 0.35);
+            color: var(--accent);
+            border-radius: 8px;
+            padding: 8px 14px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-section-edit:hover {
+            background: rgba(34, 197, 94, 0.25);
+            transform: translateY(-1px);
+        }
+
+        .section-edit-form {
+            display: none;
+        }
+
+        .section-edit-form.active {
+            display: block;
+        }
+
+        .section-edit-form .edit-field {
+            margin-bottom: 16px;
+        }
+
+        .section-edit-form .edit-field label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+
+        .section-edit-form .edit-field input,
+        .section-edit-form .edit-field select,
+        .section-edit-form .edit-field textarea {
+            width: 100%;
+            padding: 12px 14px;
+            background: rgba(26, 77, 51, 0.7);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: var(--text);
+            font-size: 14px;
+            font-family: inherit;
+        }
+
+        .section-edit-form .edit-field input:focus,
+        .section-edit-form .edit-field select:focus,
+        .section-edit-form .edit-field textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2);
+        }
+
+        .section-edit-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        .beneficiary-edit-row {
+            display: grid;
+            grid-template-columns: 1.4fr 1fr 90px auto;
+            gap: 10px;
+            margin-bottom: 12px;
+            align-items: end;
+        }
+
+        .btn-remove-beneficiary {
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.35);
+            color: #f87171;
+            border-radius: 8px;
+            padding: 12px;
+            cursor: pointer;
+        }
         
         .info-row {
             margin-bottom: 20px;
@@ -1144,6 +1881,7 @@ try {
             display: flex;
             justify-content: space-between;
             align-items: center;
+            gap: 12px;
             transition: all 0.3s ease;
             border: 1px solid transparent;
         }
@@ -1158,6 +1896,8 @@ try {
             display: flex;
             align-items: center;
             gap: 12px;
+            flex: 1;
+            min-width: 0; /* allow flex child text to truncate */
         }
         
         .file-icon {
@@ -1173,11 +1913,27 @@ try {
         
         .file-name {
             font-weight: 500;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .file-meta {
+            min-width: 0; /* enables ellipsis inside */
+        }
+
+        .file-meta small {
+            display: block;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
         
         .file-actions {
             display: flex;
             gap: 10px;
+            flex-shrink: 0;
         }
         
         .btn-action {
@@ -2104,6 +2860,7 @@ try {
 .file-actions {
     display: flex;
     gap: 8px;
+    flex-shrink: 0;
 }
 
 .btn-action {
@@ -2127,6 +2884,56 @@ try {
     border-color: var(--accent);
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+}
+
+/* Font Awesome: restore icon font after global * { font-family } reset */
+.fa-solid,
+.fas,
+.far,
+.fa-regular {
+    font-family: "Font Awesome 6 Free" !important;
+    font-style: normal;
+    font-variant: normal;
+    line-height: 1;
+    text-rendering: auto;
+    -webkit-font-smoothing: antialiased;
+}
+
+.fa-solid,
+.fas {
+    font-weight: 900;
+}
+
+.far,
+.fa-regular {
+    font-weight: 400;
+}
+
+.file-icon {
+    flex-shrink: 0;
+}
+
+.file-icon i {
+    font-size: 18px;
+    display: inline-block;
+}
+
+.file-name {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+}
+
+.file-actions .btn-action i {
+    font-size: 15px;
+    display: inline-block;
+    pointer-events: none;
+}
+
+.attachment-replace-form {
+    display: inline-flex;
+    margin: 0;
+    padding: 0;
 }
     </style>
 </head>
@@ -2223,7 +3030,7 @@ try {
                 </div>
                 
                 <div class="header-actions">
-                    <a href="applications.php" class="btn btn-secondary tooltip" data-tooltip="Back to Applications">
+                    <a href="<?php echo htmlspecialchars($applicationsReturnUrl); ?>" class="btn btn-secondary tooltip" data-tooltip="Back to Applications">
                         <i class="fas fa-arrow-left"></i> Back
                     </a>
                     <button onclick="downloadFullApplication()" class="btn btn-download tooltip" data-tooltip="Download All Files + PDF">
@@ -2261,7 +3068,10 @@ try {
             <!-- Application Header -->
             <div class="application-header animate-in">
                 <div class="application-id">
-                    <span>Application #<?php echo str_pad($applicationId, 6, '0', STR_PAD_LEFT); ?></span>
+                    <span>Application Reference: <?php echo htmlspecialchars($applicationReference); ?></span>
+                    <span style="font-size: 14px; color: var(--text-muted); margin-left: 8px;">
+                        (#<?php echo str_pad($applicationId, 6, '0', STR_PAD_LEFT); ?>)
+                    </span>
                     <span class="application-status <?php echo $application['status']; ?>">
                         <span class="status-indicator <?php echo $application['status']; ?>"></span>
                         <?php echo ucfirst($application['status']); ?>
@@ -2302,7 +3112,13 @@ try {
                     <div class="section-title">
                         <i class="fas fa-user-circle"></i>
                         <span>Personal Information</span>
+                        <?php if ($canEditApplicationDetails): ?>
+                        <button type="button" class="btn-section-edit" onclick="toggleSectionEdit('personal')">
+                            <i class="fas fa-pen"></i> Edit
+                        </button>
+                        <?php endif; ?>
                     </div>
+                    <div id="personal-view">
                     <div class="info-row">
                         <div class="info-label">Full Name</div>
                         <div class="info-value"><?php echo htmlspecialchars($application['full_name']); ?></div>
@@ -2344,6 +3160,47 @@ try {
                         <div class="info-label">Address</div>
                         <div class="info-value"><?php echo nl2br(htmlspecialchars($application['address'])); ?></div>
                     </div>
+                    </div>
+                    <?php if ($canEditApplicationDetails): ?>
+                    <form method="POST" action="" id="personal-edit" class="section-edit-form">
+                        <div class="edit-field">
+                            <label for="full_name">Full Name</label>
+                            <input type="text" id="full_name" name="full_name" required maxlength="255" value="<?php echo htmlspecialchars($application['full_name']); ?>">
+                        </div>
+                        <div class="edit-field">
+                            <label for="name_with_initials">Name with Initials</label>
+                            <input type="text" id="name_with_initials" name="name_with_initials" required maxlength="255" value="<?php echo htmlspecialchars($application['name_with_initials']); ?>">
+                        </div>
+                        <div class="edit-field">
+                            <label for="nic_no">NIC Number</label>
+                            <input type="text" id="nic_no" name="nic_no" required maxlength="20" value="<?php echo htmlspecialchars($application['nic_no']); ?>">
+                        </div>
+                        <div class="edit-field">
+                            <label for="dob">Date of Birth</label>
+                            <input type="date" id="dob" name="dob" required value="<?php echo htmlspecialchars($application['dob']); ?>">
+                        </div>
+                        <div class="edit-field">
+                            <label for="email">Email Address</label>
+                            <input type="email" id="email" name="email" maxlength="255" value="<?php echo htmlspecialchars($application['email']); ?>">
+                        </div>
+                        <div class="edit-field">
+                            <label for="tel_no">Phone Number</label>
+                            <input type="text" id="tel_no" name="tel_no" required maxlength="20" value="<?php echo htmlspecialchars($application['tel_no']); ?>">
+                        </div>
+                        <div class="edit-field">
+                            <label for="address">Address</label>
+                            <textarea id="address" name="address" required rows="3"><?php echo htmlspecialchars($application['address']); ?></textarea>
+                        </div>
+                        <div class="section-edit-actions">
+                            <button type="submit" name="update_personal_info" class="btn btn-primary" style="width: auto;">
+                                <i class="fas fa-save"></i> Save
+                            </button>
+                            <button type="button" class="btn btn-secondary" style="width: auto;" onclick="toggleSectionEdit('personal', false)">
+                                Cancel
+                            </button>
+                        </div>
+                    </form>
+                    <?php endif; ?>
                 </div>
                 
                 <!-- Professional Information -->
@@ -2351,7 +3208,13 @@ try {
                     <div class="section-title">
                         <i class="fas fa-briefcase"></i>
                         <span>Professional Information</span>
+                        <?php if ($canEditApplicationDetails): ?>
+                        <button type="button" class="btn-section-edit" onclick="toggleSectionEdit('professional')">
+                            <i class="fas fa-pen"></i> Edit
+                        </button>
+                        <?php endif; ?>
                     </div>
+                    <div id="professional-view">
                     <div class="info-row">
                         <div class="info-label">Occupation</div>
                         <div class="info-value"><?php echo htmlspecialchars($application['occupation']); ?></div>
@@ -2379,16 +3242,82 @@ try {
                         <div class="info-label">Investment Type</div>
                         <div class="info-value">
                             <span class="badge percentage"><?php
-                                $investmentTypeNames = [
-                                    'HPP' => 'High profit plan',
-                                    'GSP' => 'Green saving plan',
-                                    'GSI' => 'Green silver plan',
-                                    'GOLD' => 'Gold plan',
-                                    'SFPS' => 'Seraa farm profit share plan',
-                                    'SFHPS' => 'Seraa farm high profit share plan'
-                                ];
                                 echo htmlspecialchars($investmentTypeNames[$application['investment_type']] ?? $application['investment_type']);
-                            ?> </span>
+                            ?></span>
+                        </div>
+                    </div>
+
+                    <?php if (($application['investment_type'] ?? '') === 'GSP' && !empty($application['gsp_plan'])): ?>
+                    <div class="info-row">
+                        <div class="info-label">GSP Plan</div>
+                        <div class="info-value">
+                            <span class="badge percentage"><?php
+                                $gspPlanLabels = ['plan1' => 'Plan 1', 'plan2' => 'Plan 2', 'plan3' => 'Plan 3'];
+                                echo htmlspecialchars($gspPlanLabels[$application['gsp_plan']] ?? $application['gsp_plan']);
+                            ?></span>
+                        </div>
+                    </div>
+                    <?php if (($application['gsp_plan'] ?? '') === 'plan1' && !empty($application['gsp_payment_option'])): ?>
+                    <div class="info-row">
+                        <div class="info-label">GSP Payment Option</div>
+                        <div class="info-value">
+                            <span class="badge percentage"><?php
+                                echo $application['gsp_payment_option'] === 'one_time'
+                                    ? 'One time payment (Rs. 200,000)'
+                                    : htmlspecialchars($application['gsp_payment_option']);
+                            ?></span>
+                        </div>
+                    </div>
+                    <?php if (!empty($application['maturity_amount'])): ?>
+                    <div class="info-row">
+                        <div class="info-label">Maturity Amount</div>
+                        <div class="info-value">
+                            <span class="badge percentage">Rs.<?php echo htmlspecialchars(number_format((float)$application['maturity_amount'], 2)); ?></span>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+                    <?php endif; ?>
+                    <?php endif; ?>
+
+                    <div class="info-row">
+                        <div class="info-label">Application Reference</div>
+                        <div class="info-value">
+                            <span class="badge percentage" id="applicationRefDisplay"><?php echo htmlspecialchars($applicationReference); ?></span>
+                            <button type="button" onclick="copyText('<?php echo htmlspecialchars($applicationReference, ENT_QUOTES); ?>')" class="btn-action" style="margin-left: 10px; padding: 2px 8px;" title="Copy reference">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <?php if (!empty($application['sales_person_code'])): ?>
+                    <div class="info-row">
+                        <div class="info-label">Sales Person Code</div>
+                        <div class="info-value">
+                            <span class="badge percentage"><?php echo htmlspecialchars($application['sales_person_code']); ?></span>
+                        </div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Sales Person Name</div>
+                        <div class="info-value">
+                            <?php echo htmlspecialchars($application['sales_person_name'] ?? '—'); ?>
+                        </div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Sales Person Branch</div>
+                        <div class="info-value">
+                            <?php echo htmlspecialchars($application['sales_person_branch'] ?? '—'); ?>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+
+                    <div class="info-row">
+                        <div class="info-label">Agreement Number</div>
+                        <div class="info-value">
+                            <?php if (!empty($application['agreement_no'])): ?>
+                                <span class="badge percentage"><?php echo htmlspecialchars($application['agreement_no']); ?></span>
+                            <?php else: ?>
+                                <span style="color: var(--text-muted);">Not assigned yet</span>
+                            <?php endif; ?>
                         </div>
                     </div>
 
@@ -2396,6 +3325,50 @@ try {
                         <div class="info-label">Signing Date</div>
                         <div class="info-value"><?php echo $application['formatted_signing']; ?></div>
                     </div>
+                    </div>
+                    <?php if ($canEditApplicationDetails): ?>
+                    <form method="POST" action="" id="professional-edit" class="section-edit-form">
+                        <div class="edit-field">
+                            <label for="occupation">Occupation</label>
+                            <input type="text" id="occupation" name="occupation" required maxlength="100" value="<?php echo htmlspecialchars($application['occupation']); ?>">
+                        </div>
+                        <div class="edit-field">
+                            <label for="employer_name">Employer</label>
+                            <input type="text" id="employer_name" name="employer_name" required maxlength="255" value="<?php echo htmlspecialchars($application['employer_name']); ?>">
+                        </div>
+                        <div class="edit-field">
+                            <label for="years">Investment Years</label>
+                            <input type="number" id="years" name="years" required min="1" value="<?php echo (int)$application['years']; ?>">
+                        </div>
+                        <div class="edit-field">
+                            <label for="investment_amount">Investment Amount (Rs.)</label>
+                            <input type="number" id="investment_amount" name="investment_amount" step="0.01" min="0" value="<?php echo htmlspecialchars($application['investment_amount'] ?? ''); ?>">
+                        </div>
+                        <div class="edit-field">
+                            <label for="investment_type">Investment Type</label>
+                            <select id="investment_type" name="investment_type">
+                                <option value="">Select type</option>
+                                <?php foreach ($investmentTypeNames as $typeCode => $typeLabel): ?>
+                                <option value="<?php echo htmlspecialchars($typeCode); ?>" <?php echo ($application['investment_type'] ?? '') === $typeCode ? 'selected' : ''; ?>>
+                                    <?php echo htmlspecialchars($typeLabel); ?>
+                                </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="edit-field">
+                            <label for="signing_date">Signing Date</label>
+                            <input type="date" id="signing_date" name="signing_date" required value="<?php echo htmlspecialchars($application['signing_date']); ?>">
+                        </div>
+                        <div class="section-edit-actions">
+                            <button type="submit" name="update_professional_info" class="btn btn-primary" style="width: auto;">
+                                <i class="fas fa-save"></i> Save
+                            </button>
+                            <button type="button" class="btn btn-secondary" style="width: auto;" onclick="toggleSectionEdit('professional', false)">
+                                Cancel
+                            </button>
+                        </div>
+                    </form>
+                    <?php endif; ?>
                 </div>
                 
                 <!-- Bank Details -->
@@ -2403,7 +3376,13 @@ try {
                     <div class="section-title">
                         <i class="fas fa-university"></i>
                         <span>Bank Details</span>
+                        <?php if ($canEditApplicationDetails): ?>
+                        <button type="button" class="btn-section-edit" onclick="toggleSectionEdit('bank')">
+                            <i class="fas fa-pen"></i> Edit
+                        </button>
+                        <?php endif; ?>
                     </div>
+                    <div id="bank-view">
                     <div class="info-row">
                         <div class="info-label">Account Number</div>
                         <div class="info-value"><?php echo htmlspecialchars($application['account_no']); ?></div>
@@ -2420,6 +3399,35 @@ try {
                         <div class="info-label">Declaration Date</div>
                         <div class="info-value"><?php echo $application['formatted_declaration']; ?></div>
                     </div>
+                    </div>
+                    <?php if ($canEditApplicationDetails): ?>
+                    <form method="POST" action="" id="bank-edit" class="section-edit-form">
+                        <div class="edit-field">
+                            <label for="account_no">Account Number</label>
+                            <input type="text" id="account_no" name="account_no" required maxlength="50" value="<?php echo htmlspecialchars($application['account_no']); ?>">
+                        </div>
+                        <div class="edit-field">
+                            <label for="bank_name">Bank Name</label>
+                            <input type="text" id="bank_name" name="bank_name" required maxlength="100" value="<?php echo htmlspecialchars($application['bank_name']); ?>">
+                        </div>
+                        <div class="edit-field">
+                            <label for="branch_name">Branch</label>
+                            <input type="text" id="branch_name" name="branch_name" required maxlength="100" value="<?php echo htmlspecialchars($application['branch_name']); ?>">
+                        </div>
+                        <div class="edit-field">
+                            <label for="declaration_date">Declaration Date</label>
+                            <input type="date" id="declaration_date" name="declaration_date" required value="<?php echo htmlspecialchars($application['declaration_date']); ?>">
+                        </div>
+                        <div class="section-edit-actions">
+                            <button type="submit" name="update_bank_details" class="btn btn-primary" style="width: auto;">
+                                <i class="fas fa-save"></i> Save
+                            </button>
+                            <button type="button" class="btn btn-secondary" style="width: auto;" onclick="toggleSectionEdit('bank', false)">
+                                Cancel
+                            </button>
+                        </div>
+                    </form>
+                    <?php endif; ?>
                 </div>
                 
                 <!-- Beneficiaries -->
@@ -2428,7 +3436,13 @@ try {
                         <i class="fas fa-users"></i>
                         <span>Beneficiaries</span>
                         <span class="badge" style="background: var(--accent); margin-left: auto;"><?php echo count($beneficiaries); ?></span>
+                        <?php if ($canEditApplicationDetails): ?>
+                        <button type="button" class="btn-section-edit" onclick="toggleSectionEdit('beneficiaries')" style="margin-left: 10px;">
+                            <i class="fas fa-pen"></i> Edit
+                        </button>
+                        <?php endif; ?>
                     </div>
+                    <div id="beneficiaries-view">
                     <?php if (!empty($beneficiaries)): ?>
                         <?php foreach ($beneficiaries as $beneficiary): ?>
                             <div class="info-row" style="align-items: center;">
@@ -2449,53 +3463,126 @@ try {
                             <p>No beneficiaries added</p>
                         </div>
                     <?php endif; ?>
+                    </div>
+                    <?php if ($canEditApplicationDetails): ?>
+                    <form method="POST" action="" id="beneficiaries-edit" class="section-edit-form">
+                        <div id="beneficiaries-edit-rows">
+                            <?php
+                            $editBeneficiaries = !empty($beneficiaries) ? $beneficiaries : [[
+                                'beneficiary_name' => '',
+                                'beneficiary_nic' => '',
+                                'percentage' => ''
+                            ]];
+                            foreach ($editBeneficiaries as $beneficiary):
+                            ?>
+                            <div class="beneficiary-edit-row">
+                                <div class="edit-field" style="margin-bottom: 0;">
+                                    <label>Name</label>
+                                    <input type="text" name="beneficiary_name[]" required maxlength="255" value="<?php echo htmlspecialchars($beneficiary['beneficiary_name']); ?>">
+                                </div>
+                                <div class="edit-field" style="margin-bottom: 0;">
+                                    <label>NIC</label>
+                                    <input type="text" name="beneficiary_nic[]" required maxlength="20" value="<?php echo htmlspecialchars($beneficiary['beneficiary_nic']); ?>">
+                                </div>
+                                <div class="edit-field" style="margin-bottom: 0;">
+                                    <label>%</label>
+                                    <input type="number" name="beneficiary_percentage[]" required min="1" max="100" value="<?php echo htmlspecialchars($beneficiary['percentage']); ?>">
+                                </div>
+                                <button type="button" class="btn-remove-beneficiary" onclick="removeBeneficiaryRow(this)" title="Remove beneficiary">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                            <?php endforeach; ?>
+                        </div>
+                        <button type="button" class="btn btn-secondary" style="width: auto; margin-bottom: 16px;" onclick="addBeneficiaryRow()">
+                            <i class="fas fa-plus"></i> Add Beneficiary
+                        </button>
+                        <div class="section-edit-actions">
+                            <button type="submit" name="update_beneficiaries" class="btn btn-primary" style="width: auto;">
+                                <i class="fas fa-save"></i> Save
+                            </button>
+                            <button type="button" class="btn btn-secondary" style="width: auto;" onclick="toggleSectionEdit('beneficiaries', false)">
+                                Cancel
+                            </button>
+                        </div>
+                    </form>
+                    <?php endif; ?>
                 </div>
                 
                 <!-- Uploaded Files -->
                 <div class="info-section animate-in" style="animation-delay: 0.5s;">
+                    <?php
+                    $uploadedFileCount = 0;
+                    foreach ($applicationAttachmentFields as $fieldKey => $fieldMeta) {
+                        if (!empty($application[$fieldKey])) {
+                            $uploadedFileCount++;
+                        }
+                    }
+                    ?>
                     <div class="section-title">
                         <i class="fas fa-file-upload"></i>
                         <span>Uploaded Files</span>
-                        <span class="badge" style="background: var(--info); margin-left: auto;">6 files</span>
+                        <span class="badge" style="background: var(--info); margin-left: auto;">
+                            <?php echo $uploadedFileCount; ?> files
+                        </span>
                     </div>
+                    <?php if ($canReplaceAttachments): ?>
+                        <p style="color: var(--text-muted); font-size: 14px; margin: 0 0 16px;">
+                            <i class="fas fa-info-circle"></i>
+                            <?php if ($userType === 'admin'): ?>
+                                As a system administrator, you can upload or replace attachments at any time.
+                            <?php elseif ($isApprover): ?>
+                                As the second approver, you can upload or replace attachments until the application is approved or rejected.
+                            <?php else: ?>
+                                You can upload or replace attachments until the first approver approves this application.
+                            <?php endif; ?>
+                        </p>
+                    <?php endif; ?>
                     <ul class="file-list">
-                        <?php
-                        $files = [
-                            'Signature' => ['icon' => 'fas fa-signature', 'file' => $application['signature_upload']],
-                            'Investor ID' => ['icon' => 'fas fa-id-card', 'file' => $application['investor_id_doc']],
-                            'Beneficiary ID' => ['icon' => 'fas fa-id-card-alt', 'file' => $application['beneficiary_id_doc']],
-                            'Passbook' => ['icon' => 'fas fa-book', 'file' => $application['passbook_doc']],
-                            'Payment Slip' => ['icon' => 'fas fa-receipt', 'file' => $application['payment_slip_doc']],
-                            'Final Signature' => ['icon' => 'fas fa-signature', 'file' => $application['final_signature']]
-                        ];
-                        foreach ($files as $label => $fileInfo):
-                            if ($fileInfo['file']):
+                        <?php foreach ($applicationAttachmentFields as $fieldKey => $fieldMeta):
+                            $fileValue = $application[$fieldKey] ?? null;
+                            if (!$fileValue && !$canReplaceAttachments) {
+                                continue;
+                            }
                         ?>
                             <li class="file-item">
                                 <div class="file-info">
                                     <div class="file-icon">
-                                        <i class="<?php echo $fileInfo['icon']; ?>"></i>
+                                        <i class="<?php echo $fieldMeta['icon']; ?>"></i>
                                     </div>
-                                    <div>
-                                        <div class="file-name"><?php echo $label; ?></div>
-                                        <small style="color: var(--text-muted); font-size: 12px;">
-                                            <?php echo htmlspecialchars(basename($fileInfo['file'])); ?>
-                                        </small>
+                                    <div class="file-meta">
+                                        <div class="file-name"><?php echo htmlspecialchars($fieldMeta['label']); ?></div>
+                                        <?php if ($fileValue): ?>
+                                            <small style="color: var(--text-muted); font-size: 12px;">
+                                                <?php echo htmlspecialchars(basename($fileValue)); ?>
+                                            </small>
+                                        <?php else: ?>
+                                            <small style="color: var(--text-muted); font-size: 12px;">No file uploaded</small>
+                                        <?php endif; ?>
                                     </div>
                                 </div>
                                 <div class="file-actions">
-                                    <a href="../uploads/<?php echo $fileInfo['file']; ?>" target="_blank" class="btn-action tooltip" data-tooltip="View File">
-                                        <i class="fas fa-eye"></i>
-                                    </a>
-                                    <a href="../uploads/<?php echo $fileInfo['file']; ?>" download class="btn-action tooltip" data-tooltip="Download File">
-                                        <i class="fas fa-download"></i>
-                                    </a>
+                                    <?php if ($fileValue): ?>
+                                        <a href="../uploads/<?php echo htmlspecialchars($fileValue); ?>" target="_blank" class="btn-action tooltip" data-tooltip="View File">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                        <a href="../uploads/<?php echo htmlspecialchars($fileValue); ?>" download class="btn-action tooltip" data-tooltip="Download File">
+                                            <i class="fas fa-download"></i>
+                                        </a>
+                                    <?php endif; ?>
+                                    <?php if ($canReplaceAttachments): ?>
+                                        <form method="POST" action="" enctype="multipart/form-data" class="attachment-replace-form" style="display: inline;">
+                                            <input type="hidden" name="replace_attachment" value="1">
+                                            <input type="hidden" name="attachment_field" value="<?php echo htmlspecialchars($fieldKey); ?>">
+                                            <input type="file" name="attachment_file" id="attachment_file_<?php echo htmlspecialchars($fieldKey); ?>" accept=".jpg,.jpeg,.png,.pdf" style="display: none;" onchange="submitAttachmentReplace(this, '<?php echo htmlspecialchars($fieldMeta['label'], ENT_QUOTES); ?>')">
+                                            <button type="button" class="btn-action tooltip" data-tooltip="<?php echo $fileValue ? 'Replace File' : 'Upload File'; ?>" style="color: var(--warning); background: rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.3);" onclick="document.getElementById('attachment_file_<?php echo htmlspecialchars($fieldKey); ?>').click();">
+                                                <i class="fas fa-<?php echo $fileValue ? 'right-left' : 'upload'; ?>"></i>
+                                            </button>
+                                        </form>
+                                    <?php endif; ?>
                                 </div>
                             </li>
-                        <?php
-                            endif;
-                        endforeach;
-                        ?>
+                        <?php endforeach; ?>
                     </ul>
                 </div><br><br><br>
                 
@@ -2631,17 +3718,8 @@ try {
         $currentLevel = $application['approver_level'];
         $status = $application['status'];
         
-        // Check if current user is an approver for this level
-        $isApproverForThisLevel = false;
-        
-        if ($isApprover) {
-            // For approver login
-            $isApproverForThisLevel = ($approverLevel == $currentLevel);
-        } else {
-            // For admin login
-            // Admins can always approve (you can change this if needed)
-            $isApproverForThisLevel = true;
-        }
+        // Approval buttons only for approvers at the current level (not admins)
+        $isApproverForThisLevel = $isApprover && ((int)$approverLevel === (int)$currentLevel);
         
         // Get approvers for each level from approvers table
         $levelApprovers = [];
@@ -2659,8 +3737,8 @@ try {
             // If approvers table doesn't exist, use default
             $levelApprovers = [
                 1 => [['name' => 'First Approver', 'email' => 'approver1@company.com', 'role' => 'approver']],
-                2 => [['name' => 'Second Approver', 'email' => 'approver2@company.com', 'role' => 'approver']],
-                3 => [['name' => 'Final Approver', 'email' => 'approver3@company.com', 'role' => 'approver']]
+                2 => [['name' => 'Isurindi', 'email' => 'isurindi@serendibgroups.com', 'role' => 'approver']],
+                3 => [['name' => 'Final Approver', 'email' => 'seneth@serendibgroups.com', 'role' => 'approver']]
             ];
         }
         
@@ -2784,7 +3862,7 @@ try {
                     <i class="fas fa-user-lock"></i>
                 </div>
                 <h3 style="color: var(--text); margin-bottom: 15px; font-size: 24px;">
-                    <?php echo $isApprover ? "Not Authorized for Level $currentLevel" : "Admin Access Required"; ?>
+                    <?php echo $isApprover ? "Not Authorized for Level $currentLevel" : "Approver Access Only"; ?>
                 </h3>
                 <div style="max-width: 600px; margin: 0 auto 25px;">
                     <p style="color: var(--text-muted); margin-bottom: 15px; font-size: 16px; line-height: 1.6;">
@@ -2792,7 +3870,7 @@ try {
                             You are logged in as Level <?php echo $approverLevel; ?> Approver, 
                             but this application requires Level <?php echo $currentLevel; ?> approval.
                         <?php else: ?>
-                            You are logged in as Admin. 
+                            Approval actions are available only to assigned approvers.
                             <?php if ($currentLevel > 0): ?>
                                 This application is currently at Level <?php echo $currentLevel; ?> of the approval process.
                             <?php endif; ?>
@@ -3039,6 +4117,34 @@ try {
                         Current Approver: Level <?php echo $currentLevel; ?>
                     </span>
                 </div>
+
+                <?php if ($canEditAgreementNo): ?>
+                <form method="POST" action="" id="agreementNoForm" style="margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid var(--border);">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="agreement_no">
+                                <i class="fas fa-file-contract"></i> Agreement Number
+                                <small style="color: var(--text-muted); font-weight: normal;">Shown on investment agreements</small>
+                            </label>
+                            <input
+                                type="text"
+                                id="agreement_no"
+                                name="agreement_no"
+                                maxlength="50"
+                                required
+                                placeholder="e.g. 2026/H0001"
+                                value="<?php echo htmlspecialchars($application['agreement_no'] ?? ''); ?>"
+                                style="width: 100%; padding: 12px 16px; background: rgba(26, 77, 51, 0.5); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 16px;"
+                            >
+                        </div>
+                    </div>
+                    <div class="btn-group" style="margin-top: 0;">
+                        <button type="submit" name="update_agreement_no" class="btn btn-primary" style="width: auto;">
+                            <i class="fas fa-save"></i> Save Agreement Number
+                        </button>
+                    </div>
+                </form>
+                <?php endif; ?>
                 
                 <form method="POST" action="" enctype="multipart/form-data" id="statusUpdateForm">
                     <input type="hidden" name="approver_level" id="approverLevel" value="<?php echo $currentLevel; ?>">
@@ -3088,6 +4194,74 @@ try {
     </div>
     
     <script>
+        const editableSections = ['personal', 'professional', 'bank', 'beneficiaries'];
+
+        function toggleSectionEdit(section, show = null) {
+            const viewEl = document.getElementById(`${section}-view`);
+            const editEl = document.getElementById(`${section}-edit`);
+            if (!viewEl || !editEl) {
+                return;
+            }
+
+            const shouldShow = show === null ? editEl.style.display === 'none' || !editEl.classList.contains('active') : show;
+
+            editableSections.forEach((name) => {
+                const sectionView = document.getElementById(`${name}-view`);
+                const sectionEdit = document.getElementById(`${name}-edit`);
+                if (!sectionView || !sectionEdit) {
+                    return;
+                }
+
+                if (name === section && shouldShow) {
+                    sectionView.style.display = 'none';
+                    sectionEdit.style.display = 'block';
+                    sectionEdit.classList.add('active');
+                } else {
+                    sectionView.style.display = 'block';
+                    sectionEdit.style.display = 'none';
+                    sectionEdit.classList.remove('active');
+                }
+            });
+        }
+
+        function addBeneficiaryRow() {
+            const container = document.getElementById('beneficiaries-edit-rows');
+            if (!container) {
+                return;
+            }
+
+            const row = document.createElement('div');
+            row.className = 'beneficiary-edit-row';
+            row.innerHTML = `
+                <div class="edit-field" style="margin-bottom: 0;">
+                    <label>Name</label>
+                    <input type="text" name="beneficiary_name[]" required maxlength="255">
+                </div>
+                <div class="edit-field" style="margin-bottom: 0;">
+                    <label>NIC</label>
+                    <input type="text" name="beneficiary_nic[]" required maxlength="20">
+                </div>
+                <div class="edit-field" style="margin-bottom: 0;">
+                    <label>%</label>
+                    <input type="number" name="beneficiary_percentage[]" required min="1" max="100">
+                </div>
+                <button type="button" class="btn-remove-beneficiary" onclick="removeBeneficiaryRow(this)" title="Remove beneficiary">
+                    <i class="fas fa-trash"></i>
+                </button>
+            `;
+            container.appendChild(row);
+        }
+
+        function removeBeneficiaryRow(button) {
+            const container = document.getElementById('beneficiaries-edit-rows');
+            const rows = container ? container.querySelectorAll('.beneficiary-edit-row') : [];
+            if (rows.length <= 1) {
+                showToast('At least one beneficiary is required', 'warning');
+                return;
+            }
+            button.closest('.beneficiary-edit-row').remove();
+        }
+
 // Add permission check before showing action buttons
 function checkApprovalPermissions() {
     const currentLevel = <?php echo $currentLevel; ?>;
@@ -3361,6 +4535,44 @@ function setAction(action) {
             }
         }
         
+        function submitAttachmentReplace(input, fieldLabel) {
+            if (!input.files || !input.files[0]) {
+                return;
+            }
+
+            const file = input.files[0];
+            const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
+            const fileExt = file.name.split('.').pop().toLowerCase();
+            const allowedExts = ['jpg', 'jpeg', 'png', 'pdf'];
+
+            if (!allowedTypes.includes(file.type) && !allowedExts.includes(fileExt)) {
+                showToast('Only JPG, JPEG, PNG, and PDF files are allowed', 'error');
+                input.value = '';
+                return;
+            }
+
+            const maxAttachmentMb = <?php echo defined('MAX_FILE_SIZE_MB') ? (int)MAX_FILE_SIZE_MB : 3; ?>;
+            const fileSizeMb = file.size / 1024 / 1024;
+            if (fileSizeMb > maxAttachmentMb) {
+                showToast('Invalid file attachment', 'error');
+                input.value = '';
+                return;
+            }
+
+            const actionText = input.closest('.file-item')?.querySelector('.fa-right-left') ? 'replace' : 'upload';
+            if (!confirm(`Are you sure you want to ${actionText} the ${fieldLabel} attachment?`)) {
+                input.value = '';
+                return;
+            }
+
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            if (loadingOverlay) {
+                loadingOverlay.style.display = 'flex';
+            }
+
+            input.form.submit();
+        }
+
         // Copy text to clipboard
         function copyText(text) {
             navigator.clipboard.writeText(text).then(() => {
@@ -3369,10 +4581,13 @@ function setAction(action) {
                 showToast('Failed to copy', 'error');
             });
         }
-        
+
         // Copy application data
         function copyApplicationData() {
-            const data = `Application #<?php echo str_pad($applicationId, 6, '0', STR_PAD_LEFT); ?>
+            const data = `Application Reference: <?php echo htmlspecialchars($applicationReference, ENT_QUOTES); ?>
+Application #<?php echo str_pad($applicationId, 6, '0', STR_PAD_LEFT); ?>
+<?php if (!empty($application['agreement_no'])): ?>Agreement Number: <?php echo htmlspecialchars($application['agreement_no'], ENT_QUOTES); ?>
+<?php endif; ?>
 Name: <?php echo $application['full_name']; ?>
 NIC: <?php echo $application['nic_no']; ?>
 Email: <?php echo $application['email']; ?>

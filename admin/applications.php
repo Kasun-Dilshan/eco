@@ -57,6 +57,9 @@ if ($isApprover) {
     }
 }
 
+// Staff can delete only rejected applications; admin/approver can delete any
+$canDeleteAny = $isApprover || $userType === 'admin';
+$isStaff = !$isApprover && $userType === 'staff';
 
 // Handle delete action
 if (isset($_GET['delete_id']) && is_numeric($_GET['delete_id'])) {
@@ -68,15 +71,20 @@ if (isset($_GET['delete_id']) && is_numeric($_GET['delete_id'])) {
     $application = $stmt->fetch();
     
     if ($application) {
-        // Delete beneficiaries first (if they exist)
-        $stmt = $db->prepare("DELETE FROM beneficiaries WHERE investor_id = ?");
-        $stmt->execute([$delete_id]);
-        
-        // Delete the application
-        $stmt = $db->prepare("DELETE FROM investors WHERE id = ?");
-        $stmt->execute([$delete_id]);
-        
-        $_SESSION['delete_success'] = "Application #" . str_pad($delete_id, 6, '0', STR_PAD_LEFT) . " has been deleted successfully.";
+        $canDelete = $canDeleteAny || ($isStaff && ($application['status'] ?? '') === 'rejected');
+        if (!$canDelete) {
+            $_SESSION['delete_error'] = 'Staff can delete only rejected applications.';
+        } else {
+            // Delete beneficiaries first (if they exist)
+            $stmt = $db->prepare("DELETE FROM beneficiaries WHERE investor_id = ?");
+            $stmt->execute([$delete_id]);
+            
+            // Delete the application
+            $stmt = $db->prepare("DELETE FROM investors WHERE id = ?");
+            $stmt->execute([$delete_id]);
+            
+            $_SESSION['delete_success'] = "Application #" . str_pad($delete_id, 6, '0', STR_PAD_LEFT) . " has been deleted successfully.";
+        }
         
         // Redirect to avoid resubmission
         header("Location: applications.php");
@@ -86,19 +94,41 @@ if (isset($_GET['delete_id']) && is_numeric($_GET['delete_id'])) {
 
 // Get filter parameters
 $filter = $_GET['filter'] ?? 'all';
-$search = $_GET['search'] ?? '';
+$search = trim($_GET['search'] ?? '');
+$branch = trim($_GET['branch'] ?? '');
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $limit = 20;
 $offset = ($page - 1) * $limit;
 
-// Build query based on filters - FIXED: Removed reviewed_by join
+$allowedFilters = ['all', 'pending', 'in_progress', 'approved', 'rejected'];
+if (!in_array($filter, $allowedFilters, true)) {
+    $filter = 'all';
+}
+
+try {
+    $branchStmt = $db->query("SELECT DISTINCT branch FROM sales_persons WHERE branch IS NOT NULL AND branch != '' ORDER BY branch");
+    $branches = $branchStmt ? $branchStmt->fetchAll(PDO::FETCH_COLUMN, 0) : [];
+} catch (PDOException $e) {
+    $branches = [];
+}
+
+$salesPersonJoin = 'LEFT JOIN sales_persons sp ON sp.sales_code = i.sales_person_code';
+
+// Build query based on filters
 $whereClause = '';
 $params = [];
 
-if (!empty($search)) {
-    $whereClause = "WHERE (i.full_name LIKE ? OR i.email LIKE ? OR i.nic_no LIKE ?)";
+if ($search !== '') {
+    $whereClause = "WHERE (
+        i.full_name LIKE ? OR
+        i.email LIKE ? OR
+        i.nic_no LIKE ? OR
+        i.tel_no LIKE ? OR
+        i.agreement_no LIKE ? OR
+        CAST(i.id AS CHAR) LIKE ?
+    )";
     $searchTerm = "%$search%";
-    $params = array_fill(0, 3, $searchTerm);
+    $params = array_fill(0, 6, $searchTerm);
 }
 
 if ($filter !== 'all') {
@@ -110,18 +140,48 @@ if ($filter !== 'all') {
     $params[] = $filter;
 }
 
-// Get total count for pagination - FIXED: Simplified query
-$countQuery = "SELECT COUNT(*) FROM investors i $whereClause";
+if ($branch !== '') {
+    if ($whereClause) {
+        $whereClause .= " AND sp.branch = ?";
+    } else {
+        $whereClause = "WHERE sp.branch = ?";
+    }
+    $params[] = $branch;
+}
+
+$hasActiveFilters = $search !== '' || $filter !== 'all' || $branch !== '';
+$filterQueryParts = [];
+if ($search !== '') {
+    $filterQueryParts[] = 'search=' . urlencode($search);
+}
+if ($branch !== '') {
+    $filterQueryParts[] = 'branch=' . urlencode($branch);
+}
+$filterQuerySuffix = $filterQueryParts ? '&' . implode('&', $filterQueryParts) : '';
+
+// Preserve list page + filters when opening an application (so Back returns to the same page)
+$viewReturnParts = ['page=' . (int)$page, 'filter=' . urlencode($filter)];
+if ($search !== '') {
+    $viewReturnParts[] = 'search=' . urlencode($search);
+}
+if ($branch !== '') {
+    $viewReturnParts[] = 'branch=' . urlencode($branch);
+}
+$viewReturnQuery = '&' . implode('&', $viewReturnParts);
+
+// Get total count for pagination
+$countQuery = "SELECT COUNT(DISTINCT i.id) FROM investors i $salesPersonJoin $whereClause";
 $stmt = $db->prepare($countQuery);
 $stmt->execute($params);
 $totalApplications = $stmt->fetchColumn();
 $totalPages = ceil($totalApplications / $limit);
 
-// Get applications with pagination - FIXED: Removed reviewed_by join
+// Get applications with pagination
 $query = "
     SELECT i.*, 
            COUNT(b.id) as beneficiary_count
     FROM investors i
+    $salesPersonJoin
     LEFT JOIN beneficiaries b ON i.id = b.investor_id
     $whereClause
     GROUP BY i.id
@@ -138,7 +198,7 @@ $applications = $stmt->fetchAll();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Applications | EcoWealth Admin</title>
+    <title>Applications | SERENDIB GREEN PLANTATION PVT LTD Admin</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         * {
@@ -367,6 +427,66 @@ $applications = $stmt->fetchAll();
         }
         
         /* Filters */
+        .filters {
+            background: rgba(10, 47, 29, 0.7);
+            border: 1px solid rgba(34, 197, 94, 0.2);
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 25px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .filters h3 {
+            color: #22c55e;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 18px;
+        }
+        
+        .filter-row {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .filter-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #f0fdf4;
+        }
+        
+        .filter-group input,
+        .filter-group select {
+            width: 100%;
+            padding: 12px 16px;
+            background: rgba(26, 77, 51, 0.7);
+            border: 1px solid rgba(34, 197, 94, 0.2);
+            border-radius: 8px;
+            color: #f0fdf4;
+            font-size: 14px;
+        }
+        
+        .filter-group input:focus,
+        .filter-group select:focus {
+            outline: none;
+            border-color: #22c55e;
+        }
+        
+        .filter-group select option {
+            background: #0a2f1d;
+            color: #f0fdf4;
+        }
+        
+        .filter-actions {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        
         .filter-buttons {
             display: flex;
             gap: 10px;
@@ -396,29 +516,10 @@ $applications = $stmt->fetchAll();
             border-color: #22c55e;
         }
         
-        /* Search Box */
-        .search-box {
-            position: relative;
-            margin-bottom: 20px;
-            max-width: 400px;
-        }
-        
-        .search-box input {
-            width: 100%;
-            padding: 12px 20px 12px 45px;
-            background: rgba(26, 77, 51, 0.7);
-            border: 1px solid rgba(34, 197, 94, 0.2);
-            border-radius: 10px;
-            color: #f0fdf4;
-            font-size: 16px;
-        }
-        
-        .search-box i {
-            position: absolute;
-            left: 15px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: rgba(167, 243, 208, 0.6);
+        @media (max-width: 768px) {
+            .filter-row {
+                grid-template-columns: 1fr;
+            }
         }
         
         /* Applications Table */
@@ -654,6 +755,13 @@ $applications = $stmt->fetchAll();
                             <?php endif; ?>
                         </a>
                     </li>
+                    <?php if (($userType ?? '') === 'admin'): ?>
+                    <li>
+                        <a href="add_old_investment.php">
+                            <i class="fas fa-history"></i> Add Old Investment
+                        </a>
+                    </li>
+                    <?php endif; ?>
                     <li>
                         <a href="send_email.php">
                             <i class="fas fa-envelope"></i> Send Email
@@ -673,12 +781,19 @@ $applications = $stmt->fetchAll();
             <div class="content-header">
                 <h1>Applications Management</h1>
                 <div class="header-actions">
+                    <?php if (($userType ?? '') === 'admin'): ?>
+                        <a href="add_old_investment.php" class="btn btn-primary">
+                            <i class="fas fa-history"></i> Add Old Investment
+                        </a>
+                    <?php endif; ?>
                     <button type="button" onclick="exportApplications()" class="btn btn-primary">
                         <i class="fas fa-file-export"></i> Export All
                     </button>
-                    <button type="button" onclick="showBulkDelete()" class="btn btn-danger">
-                        <i class="fas fa-trash"></i> Bulk Delete
-                    </button>
+                    <?php if ($userType !== 'staff'): ?>
+                        <button type="button" onclick="showBulkDelete()" class="btn btn-danger">
+                            <i class="fas fa-trash"></i> Bulk Delete
+                        </button>
+                    <?php endif; ?>
                 </div>
             </div>
             
@@ -694,40 +809,53 @@ $applications = $stmt->fetchAll();
                 </div>
                 <?php unset($_SESSION['delete_success']); ?>
             <?php endif; ?>
+
+            <?php if (isset($_SESSION['delete_error'])): ?>
+                <div class="alert-error" id="errorMessage" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #fecaca; padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <i class="fas fa-exclamation-circle"></i>
+                        <?php echo htmlspecialchars($_SESSION['delete_error']); ?>
+                    </div>
+                    <button type="button" class="alert-close" onclick="document.getElementById('errorMessage').style.display='none'" style="background: none; border: none; color: inherit; cursor: pointer;">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <?php unset($_SESSION['delete_error']); ?>
+            <?php endif; ?>
             
             <!-- Stats Summary -->
             <div class="stats-summary">
                 <div class="stat-item">
                     <h3><?php echo $totalApplications; ?></h3>
-                    <p>Total Applications</p>
+                    <p><?php echo $hasActiveFilters ? 'Matching Applications' : 'Total Applications'; ?></p>
                 </div>
                 <?php
                 $stmt = $db->prepare("SELECT COUNT(*) FROM investors WHERE status = 'pending'");
                 $stmt->execute();
-                $pending = $stmt->fetchColumn();
-                ?>
-                <div class="stat-item">
-                    <h3><?php echo $pending; ?></h3>
-                    <p>Pending Review</p>
-                </div>
-
-
-                  <?php
+                $pendingCount = $stmt->fetchColumn();
+                
                 $stmt = $db->prepare("SELECT COUNT(*) FROM investors WHERE status = 'in_progress'");
                 $stmt->execute();
-                $pending = $stmt->fetchColumn();
-                ?>
-                <div class="stat-item">
-                    <h3><?php echo $pending; ?></h3>
-                    <p>In Progress</p>
-                </div>
-                <?php
+                $inProgressCount = $stmt->fetchColumn();
+                
                 $stmt = $db->prepare("SELECT COUNT(*) FROM investors WHERE status = 'approved'");
                 $stmt->execute();
-                $approved = $stmt->fetchColumn();
+                $approvedCount = $stmt->fetchColumn();
+                
+                $stmt = $db->prepare("SELECT COUNT(*) FROM investors WHERE status = 'rejected'");
+                $stmt->execute();
+                $rejectedCount = $stmt->fetchColumn();
                 ?>
                 <div class="stat-item">
-                    <h3><?php echo $approved; ?></h3>
+                    <h3><?php echo $pendingCount; ?></h3>
+                    <p>Pending Review</p>
+                </div>
+                <div class="stat-item">
+                    <h3><?php echo $inProgressCount; ?></h3>
+                    <p>In Progress</p>
+                </div>
+                <div class="stat-item">
+                    <h3><?php echo $approvedCount; ?></h3>
                     <p>Approved</p>
                 </div>
                 <div class="stat-item">
@@ -737,29 +865,67 @@ $applications = $stmt->fetchAll();
             </div>
             
             <!-- Filters and Search -->
-            <div class="filter-buttons">
-                <a href="?filter=all" class="filter-btn <?php echo $filter == 'all' ? 'active' : ''; ?>">
-                    All Applications
-                </a>
-                <a href="?filter=pending" class="filter-btn <?php echo $filter == 'pending' ? 'active' : ''; ?>">
-                    Pending (<?php echo $pending; ?>)
-                </a>
-                  <a href="?filter=in_progress" class="filter-btn <?php echo $filter == 'in_progress' ? 'active' : ''; ?>">
-                    In Progress (<?php echo $pending; ?>)
-                </a>
-                <a href="?filter=approved" class="filter-btn <?php echo $filter == 'approved' ? 'active' : ''; ?>">
-                    Approved (<?php echo $approved; ?>)
-                </a>
-                <a href="?filter=rejected" class="filter-btn <?php echo $filter == 'rejected' ? 'active' : ''; ?>">
-                    Rejected
-                </a>
+            <div class="filters">
+                <h3><i class="fas fa-filter"></i> Filter & Search Applications</h3>
+                <form method="GET" action="">
+                    <div class="filter-row">
+                        <div class="filter-group">
+                            <label for="search"><i class="fas fa-search"></i> Search</label>
+                            <input type="text"
+                                   id="search"
+                                   name="search"
+                                   placeholder="Search by ID, agreement no, name, email, NIC, or phone..."
+                                   value="<?php echo htmlspecialchars($search); ?>">
+                        </div>
+                        <div class="filter-group">
+                            <label for="filter"><i class="fas fa-tag"></i> Status</label>
+                            <select id="filter" name="filter">
+                                <option value="all" <?php echo $filter === 'all' ? 'selected' : ''; ?>>All Statuses</option>
+                                <option value="pending" <?php echo $filter === 'pending' ? 'selected' : ''; ?>>Pending</option>
+                                <option value="in_progress" <?php echo $filter === 'in_progress' ? 'selected' : ''; ?>>In Progress</option>
+                                <option value="approved" <?php echo $filter === 'approved' ? 'selected' : ''; ?>>Approved</option>
+                                <option value="rejected" <?php echo $filter === 'rejected' ? 'selected' : ''; ?>>Rejected</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label for="branch"><i class="fas fa-building"></i> Sales Person Branch</label>
+                            <select id="branch" name="branch">
+                                <option value="">All Branches</option>
+                                <?php foreach ($branches as $branchName): ?>
+                                    <option value="<?php echo htmlspecialchars($branchName); ?>" <?php echo $branch === $branchName ? 'selected' : ''; ?>>
+                                        <?php echo htmlspecialchars($branchName); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="filter-actions">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-search"></i> Apply Filters
+                        </button>
+                        <a href="applications.php" class="btn btn-secondary">
+                            <i class="fas fa-times"></i> Clear Filters
+                        </a>
+                    </div>
+                </form>
             </div>
             
-            <div class="search-box">
-                <i class="fas fa-search"></i>
-                <input type="text" id="searchInput" placeholder="Search by name, email, or NIC..." 
-                       value="<?php echo htmlspecialchars($search); ?>"
-                       onkeyup="if(event.key === 'Enter') searchApplications()">
+            <div class="filter-buttons">
+                <a href="?filter=all<?php echo $filterQuerySuffix; ?>" class="filter-btn <?php echo $filter == 'all' ? 'active' : ''; ?>">
+                    All Applications
+                </a>
+                <a href="?filter=pending<?php echo $filterQuerySuffix; ?>" class="filter-btn <?php echo $filter == 'pending' ? 'active' : ''; ?>">
+                    Pending (<?php echo $pendingCount; ?>)
+                </a>
+                <a href="?filter=in_progress<?php echo $filterQuerySuffix; ?>" class="filter-btn <?php echo $filter == 'in_progress' ? 'active' : ''; ?>">
+                    In Progress (<?php echo $inProgressCount; ?>)
+                </a>
+                <a href="?filter=approved<?php echo $filterQuerySuffix; ?>" class="filter-btn <?php echo $filter == 'approved' ? 'active' : ''; ?>">
+                    Approved (<?php echo $approvedCount; ?>)
+                </a>
+                <a href="?filter=rejected<?php echo $filterQuerySuffix; ?>" class="filter-btn <?php echo $filter == 'rejected' ? 'active' : ''; ?>">
+                    Rejected (<?php echo $rejectedCount; ?>)
+                </a>
             </div>
             
             <!-- Applications Table -->
@@ -769,6 +935,7 @@ $applications = $stmt->fetchAll();
                         <thead>
                             <tr>
                                 <th>ID</th>
+                                <th>Agreement No</th>
                                 <th>Full Name</th>
                                 <th>Email</th>
                                 <th>Phone</th>
@@ -781,7 +948,13 @@ $applications = $stmt->fetchAll();
                         <tbody>
                             <?php if (empty($applications)): ?>
                                 <tr>
-                                    <td colspan="8" class="text-center">No applications found.</td>
+                                    <td colspan="9" class="text-center">
+                                        <?php if ($hasActiveFilters): ?>
+                                            No applications match your search/filter criteria.
+                                        <?php else: ?>
+                                            No applications found.
+                                        <?php endif; ?>
+                                    </td>
                                 </tr>
                             <?php else: ?>
                                 <?php foreach ($applications as $app): ?>
@@ -793,8 +966,16 @@ $applications = $stmt->fetchAll();
                                         default: $statusClass = 'status-pending';
                                     }
                                     ?>
+                                    <?php $assignedAgreementNo = trim((string)($app['agreement_no'] ?? '')); ?>
                                     <tr>
                                         <td><?php echo str_pad($app['id'], 6, '0', STR_PAD_LEFT); ?></td>
+                                        <td>
+                                            <?php if ($assignedAgreementNo !== ''): ?>
+                                                <span class="badge"><?php echo htmlspecialchars($assignedAgreementNo); ?></span>
+                                            <?php else: ?>
+                                                <span style="color: #a7f3d0; opacity: 0.6;">—</span>
+                                            <?php endif; ?>
+                                        </td>
                                         <td>
                                             <strong><?php echo htmlspecialchars($app['full_name']); ?></strong><br>
                                             <small><?php echo htmlspecialchars($app['nic_no']); ?></small>
@@ -812,21 +993,41 @@ $applications = $stmt->fetchAll();
                                         <td><?php echo date('M d, Y', strtotime($app['created_at'])); ?></td>
                                         <td>
                                             <div class="action-buttons">
-                                                <a href="view_application.php?id=<?php echo $app['id']; ?>" 
+                                                <?php if ($isApprover): ?>
+                                                    <a href="view_application.php?id=<?php echo $app['id']; ?><?php echo $viewReturnQuery; ?>"
+                                                       class="btn-action" title="Approve">
+                                                        <i class="fas fa-check"></i>
+                                                    </a>
+                                                <?php endif; ?>
+                                                <a href="view_application.php?id=<?php echo $app['id']; ?><?php echo $viewReturnQuery; ?>" 
                                                    class="btn-action" title="View">
                                                     <i class="fas fa-eye"></i>
                                                 </a>
+                                                
+                                                <?php if (($app['status'] ?? '') === 'approved'): ?>
+                                                    <a href="agreement_redirect.php?application_id=<?php echo $app['id']; ?>"
+                                                       class="btn-action" title="Agreement (Approved)">
+                                                        <i class="fas fa-file-contract"></i>
+                                                    </a>
+                                                <?php else: ?>
+                                                    <span class="btn-action"
+                                                          title="Agreement available after approval"
+                                                          style="opacity: 0.35; cursor: not-allowed; pointer-events: none;">
+                                                        <i class="fas fa-file-contract"></i>
+                                                    </span>
+                                                <?php endif; ?>
                                                
                                                 <a href="send_email.php?application_id=<?php echo $app['id']; ?>" 
                                                    class="btn-action" title="Send Email">
                                                     <i class="fas fa-envelope"></i>
                                                 </a>
-                                                <!-- Delete Button -->
-                                                <a href="javascript:void(0)" 
-                                                   onclick="confirmDelete(<?php echo $app['id']; ?>, '<?php echo htmlspecialchars(addslashes($app['full_name'])); ?>')" 
-                                                   class="btn-action btn-action-delete" title="Delete">
-                                                    <i class="fas fa-trash"></i>
-                                                </a>
+                                                <?php if ($canDeleteAny || ($isStaff && ($app['status'] ?? '') === 'rejected')): ?>
+                                                    <a href="javascript:void(0)" 
+                                                       onclick="confirmDelete(<?php echo $app['id']; ?>, '<?php echo htmlspecialchars(addslashes($app['full_name'])); ?>')" 
+                                                       class="btn-action btn-action-delete" title="Delete">
+                                                        <i class="fas fa-trash"></i>
+                                                    </a>
+                                                <?php endif; ?>
                                             </div>
                                         </td>
                                     </tr>
@@ -841,21 +1042,21 @@ $applications = $stmt->fetchAll();
             <?php if ($totalPages > 1): ?>
                 <div class="pagination">
                     <?php if ($page > 1): ?>
-                        <a href="?page=<?php echo $page - 1; ?>&filter=<?php echo $filter; ?>&search=<?php echo urlencode($search); ?>" 
+                        <a href="?page=<?php echo $page - 1; ?>&filter=<?php echo $filter; ?><?php echo $filterQuerySuffix; ?>" 
                            class="page-link">
                             <i class="fas fa-chevron-left"></i> Previous
                         </a>
                     <?php endif; ?>
                     
                     <?php for ($i = 1; $i <= min($totalPages, 10); $i++): ?>
-                        <a href="?page=<?php echo $i; ?>&filter=<?php echo $filter; ?>&search=<?php echo urlencode($search); ?>" 
+                        <a href="?page=<?php echo $i; ?>&filter=<?php echo $filter; ?><?php echo $filterQuerySuffix; ?>" 
                            class="page-link <?php echo $i == $page ? 'active' : ''; ?>">
                             <?php echo $i; ?>
                         </a>
                     <?php endfor; ?>
                     
                     <?php if ($page < $totalPages): ?>
-                        <a href="?page=<?php echo $page + 1; ?>&filter=<?php echo $filter; ?>&search=<?php echo urlencode($search); ?>" 
+                        <a href="?page=<?php echo $page + 1; ?>&filter=<?php echo $filter; ?><?php echo $filterQuerySuffix; ?>" 
                            class="page-link">
                             Next <i class="fas fa-chevron-right"></i>
                         </a>
@@ -885,7 +1086,8 @@ $applications = $stmt->fetchAll();
             <h3><i class="fas fa-exclamation-triangle"></i> Bulk Delete</h3>
             <p>This will delete all applications that match your current filters:</p>
             <ul style="margin-bottom: 20px; padding-left: 20px; color: #f0fdf4;">
-                <li>Filter: <strong><?php echo ucfirst($filter); ?> Applications</strong></li>
+                <li>Filter: <strong><?php echo ucfirst(str_replace('_', ' ', $filter)); ?> Applications</strong></li>
+                <li>Sales Person Branch: <strong><?php echo $branch ? htmlspecialchars($branch) : 'All'; ?></strong></li>
                 <li>Search: <strong><?php echo $search ? htmlspecialchars($search) : 'None'; ?></strong></li>
                 <li>Total to delete: <strong><?php echo $totalApplications; ?> applications</strong></li>
             </ul>
@@ -903,12 +1105,6 @@ $applications = $stmt->fetchAll();
     
     <script>
         let applicationToDelete = null;
-        
-        function searchApplications() {
-            const search = document.getElementById('searchInput').value;
-            const filter = '<?php echo $filter; ?>';
-            window.location.href = `?filter=${filter}&search=${encodeURIComponent(search)}`;
-        }
         
         function updateStatus(id, status) {
             if (confirm(`Are you sure you want to ${status} this application?`)) {
@@ -938,7 +1134,8 @@ $applications = $stmt->fetchAll();
         function exportApplications() {
             const filter = '<?php echo $filter; ?>';
             const search = '<?php echo urlencode($search); ?>';
-            window.location.href = `export_applications.php?filter=${filter}&search=${search}`;
+            const branch = '<?php echo urlencode($branch); ?>';
+            window.location.href = `export_applications.php?filter=${filter}&search=${search}&branch=${branch}`;
         }
         
         // Delete Functions
@@ -958,7 +1155,7 @@ $applications = $stmt->fetchAll();
         
         function performDelete() {
             if (applicationToDelete) {
-                window.location.href = `?delete_id=${applicationToDelete}&filter=<?php echo $filter; ?>&search=<?php echo urlencode($search); ?>&page=<?php echo $page; ?>`;
+                window.location.href = `?delete_id=${applicationToDelete}&filter=<?php echo $filter; ?><?php echo $filterQuerySuffix; ?>&page=<?php echo $page; ?>`;
             }
         }
         
@@ -980,10 +1177,11 @@ $applications = $stmt->fetchAll();
         function performBulkDelete() {
             const filter = '<?php echo $filter; ?>';
             const search = '<?php echo urlencode($search); ?>';
+            const branch = '<?php echo urlencode($branch); ?>';
             
             if (confirm('FINAL WARNING: This will delete ALL ' + <?php echo $totalApplications; ?> + ' applications matching your current filters. This action cannot be undone!')) {
                 // Redirect to bulk delete handler
-                window.location.href = `bulk_delete.php?filter=${filter}&search=${search}`;
+                window.location.href = `bulk_delete.php?filter=${filter}&search=${search}&branch=${branch}`;
             }
         }
         

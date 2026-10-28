@@ -3,7 +3,53 @@ session_start();
 require_once '../config.php';
 require_once '../db.php';
 
+// Admin-only access
+if (!isset($_SESSION['user_id']) || (($_SESSION['user_type'] ?? null) !== 'admin')) {
+    header('Location: dashboard.php');
+    exit();
+}
 
+$success = '';
+$error = '';
+
+// Handle approver update
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_approver'])) {
+    $approverId = (int) ($_POST['approver_id'] ?? 0);
+    $name = trim($_POST['name'] ?? '');
+    $email = trim($_POST['email'] ?? '');
+    $password = $_POST['password'] ?? '';
+    $confirmPassword = $_POST['confirm_password'] ?? '';
+
+    if (!$approverId || $name === '' || $email === '') {
+        $error = 'Please fill in username and email.';
+    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $error = 'Please enter a valid email address.';
+    } elseif ($password !== '' && $password !== $confirmPassword) {
+        $error = 'Passwords do not match.';
+    } elseif ($password !== '' && strlen($password) < 8) {
+        $error = 'Password must be at least 8 characters.';
+    } else {
+        try {
+            $checkStmt = $db->prepare('SELECT id FROM approvers WHERE (email = ? OR name = ?) AND id != ?');
+            $checkStmt->execute([$email, $name, $approverId]);
+            if ($checkStmt->fetch()) {
+                $error = 'Username or email is already used by another approver.';
+            } else {
+                if ($password !== '') {
+                    $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+                    $updateStmt = $db->prepare('UPDATE approvers SET name = ?, email = ?, password = ? WHERE id = ?');
+                    $updateStmt->execute([$name, $email, $hashedPassword, $approverId]);
+                } else {
+                    $updateStmt = $db->prepare('UPDATE approvers SET name = ?, email = ? WHERE id = ?');
+                    $updateStmt->execute([$name, $email, $approverId]);
+                }
+                $success = 'Approver updated successfully.';
+            }
+        } catch (PDOException $e) {
+            $error = 'Failed to update approver: ' . $e->getMessage();
+        }
+    }
+}
 
 // Get users data
 $users = [];
@@ -362,6 +408,188 @@ try {
             font-size: 12px;
             color: var(--text-muted);
         }
+
+        .alert {
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .alert.success {
+            background: rgba(16, 185, 129, 0.2);
+            border: 1px solid var(--success);
+            color: var(--text);
+        }
+
+        .alert.error {
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid var(--error);
+            color: var(--text);
+        }
+
+        .btn-edit {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 8px 14px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.3s ease;
+        }
+
+        .btn-edit:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+        }
+
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 15px;
+            width: 100%;
+            max-width: 500px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+        }
+
+        .modal-header {
+            padding: 20px 25px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h3 {
+            color: var(--neon);
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 24px;
+            cursor: pointer;
+            line-height: 1;
+            padding: 0;
+        }
+
+        .modal-close:hover {
+            color: var(--text);
+        }
+
+        .modal-body {
+            padding: 25px;
+        }
+
+        .form-group {
+            margin-bottom: 18px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: var(--text);
+            font-size: 14px;
+        }
+
+        .form-group label.required::after {
+            content: ' *';
+            color: var(--error);
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            background: rgba(26, 77, 51, 0.7);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 14px;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+        }
+
+        .form-hint {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 5px;
+        }
+
+        .modal-footer {
+            padding: 0 25px 25px;
+            display: flex;
+            gap: 12px;
+        }
+
+        .btn-save {
+            flex: 1;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .btn-save:hover {
+            background: #16a34a;
+        }
+
+        .btn-cancel {
+            flex: 1;
+            background: rgba(26, 77, 51, 0.7);
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-cancel:hover {
+            background: var(--hover-bg);
+            border-color: var(--accent);
+        }
         
         @media (max-width: 768px) {
             h1 {
@@ -402,9 +630,15 @@ try {
             <p class="subtitle">View all system users and approvers information</p>
         </div>
         
-        <?php if (isset($error)): ?>
-            <div style="background: rgba(239, 68, 68, 0.2); border: 1px solid var(--error); border-radius: 10px; padding: 20px; margin-bottom: 20px; color: var(--text);">
-                <i class="fas fa-exclamation-circle"></i> <?php echo $error; ?>
+        <?php if ($success): ?>
+            <div class="alert success">
+                <i class="fas fa-check-circle"></i> <?php echo htmlspecialchars($success); ?>
+            </div>
+        <?php endif; ?>
+
+        <?php if ($error): ?>
+            <div class="alert error">
+                <i class="fas fa-exclamation-circle"></i> <?php echo htmlspecialchars($error); ?>
             </div>
         <?php endif; ?>
         
@@ -546,6 +780,7 @@ try {
                                     <th>Role</th>
                                     <th>Status</th>
                                     <th>Created</th>
+                                    <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -600,6 +835,12 @@ try {
                                             echo $created->format('M d, Y') . '<br>';
                                             echo '<small>' . $created->format('h:i A') . '</small>';
                                             ?>
+                                        </td>
+                                        <td>
+                                            <button type="button" class="btn-edit"
+                                                onclick="openEditApproverModal(<?php echo (int) $approver['id']; ?>, <?php echo htmlspecialchars(json_encode($approver['name']), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($approver['email']), ENT_QUOTES, 'UTF-8'); ?>)">
+                                                <i class="fas fa-edit"></i> Edit
+                                            </button>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
@@ -688,5 +929,90 @@ try {
             </div>
         </div>
     </div>
+
+    <!-- Edit Approver Modal -->
+    <div class="modal-overlay" id="editApproverModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3><i class="fas fa-user-edit"></i> Edit Approver</h3>
+                <button type="button" class="modal-close" onclick="closeEditApproverModal()">&times;</button>
+            </div>
+            <form method="POST" action="" id="editApproverForm">
+                <input type="hidden" name="update_approver" value="1">
+                <input type="hidden" name="approver_id" id="edit_approver_id">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="edit_name" class="required">Username</label>
+                        <input type="text" id="edit_name" name="name" required>
+                        <div class="form-hint">Used to log in (along with email)</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit_email" class="required">Email</label>
+                        <input type="email" id="edit_email" name="email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit_password">New Password</label>
+                        <input type="password" id="edit_password" name="password" minlength="8" autocomplete="new-password">
+                        <div class="form-hint">Leave blank to keep the current password</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit_confirm_password">Confirm New Password</label>
+                        <input type="password" id="edit_confirm_password" name="confirm_password" autocomplete="new-password">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-cancel" onclick="closeEditApproverModal()">Cancel</button>
+                    <button type="submit" class="btn-save">
+                        <i class="fas fa-save"></i> Save Changes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function openEditApproverModal(id, name, email) {
+            document.getElementById('edit_approver_id').value = id;
+            document.getElementById('edit_name').value = name;
+            document.getElementById('edit_email').value = email;
+            document.getElementById('edit_password').value = '';
+            document.getElementById('edit_confirm_password').value = '';
+            document.getElementById('editApproverModal').classList.add('active');
+        }
+
+        function closeEditApproverModal() {
+            document.getElementById('editApproverModal').classList.remove('active');
+        }
+
+        document.getElementById('editApproverModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeEditApproverModal();
+            }
+        });
+
+        document.getElementById('editApproverForm').addEventListener('submit', function(e) {
+            const password = document.getElementById('edit_password').value;
+            const confirmPassword = document.getElementById('edit_confirm_password').value;
+
+            if (password !== '' || confirmPassword !== '') {
+                if (password !== confirmPassword) {
+                    e.preventDefault();
+                    alert('Passwords do not match.');
+                    return;
+                }
+                if (password.length < 8) {
+                    e.preventDefault();
+                    alert('Password must be at least 8 characters.');
+                    return;
+                }
+            }
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeEditApproverModal();
+            }
+        });
+    </script>
 </body>
 </html>

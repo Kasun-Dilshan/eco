@@ -8,7 +8,7 @@ require_once 'config.php';
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Serendib Green Plantation</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/style.css?v=<?php echo urlencode((string) @filemtime(__DIR__ . '/css/style.css')); ?>">
 </head>
 <body>
     <div class="floating-elements">
@@ -28,6 +28,11 @@ require_once 'config.php';
             <div class="logo">Serendib Green Plantaion</div>
             <h1>Green Investor Portal</h1>
             <p class="subtitle">Sustainable investing for a brighter future</p>
+            <p style="margin-top:12px;">
+                <a href="investor/login.php" style="color:#00ff88;font-weight:700;text-decoration:none;">
+                    <i class="fas fa-sign-in-alt"></i> Already an investor? Login with your NIC
+                </a>
+            </p>
             <?php if(isset($_SESSION['success'])): ?>
                 <div class="alert success">
                     <i class="fas fa-check-circle"></i> <?php echo $_SESSION['success']; unset($_SESSION['success']); ?>
@@ -77,11 +82,17 @@ require_once 'config.php';
             <div class="form-container">
                 <form id="investor-form" action="process_form.php" method="POST" enctype="multipart/form-data">
                     <input type="hidden" id="declarationDate" name="declarationDate" value="">
+                    <?php
+                        $applicantType = isset($_SESSION['form_data']['applicantType']) && $_SESSION['form_data']['applicantType'] === 'company'
+                            ? 'company'
+                            : 'person';
+                    ?>
+                    <input type="hidden" id="applicantType" name="applicantType" value="<?php echo htmlspecialchars($applicantType); ?>">
                     <!-- Step 1: Personal Details -->
                     <div class="form-step active" id="step1">
                         <div class="form-section">
                             <div class="section-header">
-                                <div class="section-icon">
+                                <div class="section-icon" id="personalSectionIcon">
                                     <i class="fas fa-user-astronaut"></i>
                                 </div>
                                 <div class="section-title">
@@ -89,9 +100,17 @@ require_once 'config.php';
                                     Personal Details
                                 </div>
                             </div>
+                            <div class="applicant-type-toggle" role="group" aria-label="Applicant type">
+                                <button type="button" class="applicant-type-btn<?php echo $applicantType === 'person' ? ' active' : ''; ?>" id="applicantTypePerson" onclick="setApplicantType('person')">
+                                    <i class="fas fa-user"></i> Person
+                                </button>
+                                <button type="button" class="applicant-type-btn<?php echo $applicantType === 'company' ? ' active' : ''; ?>" id="applicantTypeCompany" onclick="setApplicantType('company')">
+                                    <i class="fas fa-building"></i> Company
+                                </button>
+                            </div>
                             <div class="form-grid">
                                 <div class="form-group">
-                                    <label for="fullName" class="required">Full Name (Block Letters)</label>
+                                    <label for="fullName" class="required" id="fullNameLabel">Full Name (Block Letters)</label>
                                     <div class="input-container">
                                          <input type="text" id="fullName" name="fullName" required 
                value="<?php echo isset($_SESSION['form_data']['fullName']) ? htmlspecialchars($_SESSION['form_data']['fullName']) : ''; ?>"
@@ -103,7 +122,7 @@ require_once 'config.php';
                                     </div>
                                 </div>
                                 <div class="form-group">
-                                    <label for="nameWithInitials" class="required">Name with Initials</label>
+                                    <label for="nameWithInitials" class="required" id="nameWithInitialsLabel">Name with Initials</label>
                                     <div class="input-container">
                                        <input type="text" id="nameWithInitials" name="nameWithInitials" required 
                value="<?php echo isset($_SESSION['form_data']['nameWithInitials']) ? htmlspecialchars($_SESSION['form_data']['nameWithInitials']) : ''; ?>"
@@ -115,10 +134,11 @@ require_once 'config.php';
                                     </div>
                                 </div>
                                 <div class="form-group">
-                                    <label for="nicNo" class="required">NIC No</label>
+                                    <label for="nicNo" class="required" id="nicNoLabel">NIC No</label>
                                     <div class="input-container">
                                         <input type="text" id="nicNo" name="nicNo" required
-                                               value="<?php echo isset($_SESSION['form_data']['nicNo']) ? htmlspecialchars($_SESSION['form_data']['nicNo']) : ''; ?>">
+                                               value="<?php echo isset($_SESSION['form_data']['nicNo']) ? htmlspecialchars($_SESSION['form_data']['nicNo']) : ''; ?>"
+                                               oninput="this.value = this.value.toUpperCase()">
                                         <div class="input-highlight"></div>
                                     </div>
                                 </div>
@@ -131,7 +151,7 @@ require_once 'config.php';
                                     </div>
                                 </div>
                                 <div class="form-group">
-                                    <label for="dob" class="required">Date of Birth</label>
+                                    <label for="dob" class="required" id="dobLabel">Date of Birth</label>
                                     <div class="input-container">
                                         <input type="date" id="dob" name="dob" required
                                                value="<?php echo isset($_SESSION['form_data']['dob']) ? htmlspecialchars($_SESSION['form_data']['dob']) : ''; ?>">
@@ -139,9 +159,9 @@ require_once 'config.php';
                                     </div>
                                 </div>
                                 <div class="form-group">
-                                    <label for="email" class="required">E-mail</label>
+                                    <label for="email">E-mail (Optional)</label>
                                     <div class="input-container">
-                                        <input type="email" id="email" name="email" required
+                                        <input type="email" id="email" name="email"
                                                value="<?php echo isset($_SESSION['form_data']['email']) ? htmlspecialchars($_SESSION['form_data']['email']) : ''; ?>">
                                         <div class="input-highlight"></div>
                                     </div>
@@ -149,7 +169,7 @@ require_once 'config.php';
                                 <div class="form-group" style="grid-column: 1 / -1;">
                                     <label for="address" class="required">Address</label>
                                     <div class="input-container">
-                                        <textarea id="address" name="address" rows="3" required><?php echo isset($_SESSION['form_data']['address']) ? htmlspecialchars($_SESSION['form_data']['address']) : ''; ?></textarea>
+                                        <textarea id="address" name="address" rows="3" required oninput="this.value = this.value.toUpperCase()"><?php echo isset($_SESSION['form_data']['address']) ? htmlspecialchars($_SESSION['form_data']['address']) : ''; ?></textarea>
                                         <div class="input-highlight"></div>
                                     </div>
                                 </div>
@@ -181,15 +201,17 @@ require_once 'config.php';
                                     <label for="occupation" class="required">Occupation</label>
                                     <div class="input-container">
                                         <input type="text" id="occupation" name="occupation" required
-                                               value="<?php echo isset($_SESSION['form_data']['occupation']) ? htmlspecialchars($_SESSION['form_data']['occupation']) : ''; ?>">
+                                               value="<?php echo isset($_SESSION['form_data']['occupation']) ? htmlspecialchars($_SESSION['form_data']['occupation']) : ''; ?>"
+                                               oninput="this.value = this.value.toUpperCase()">
                                         <div class="input-highlight"></div>
                                     </div>
                                 </div>
                                 <div class="form-group">
-                                    <label for="employerName" class="required">Name of Employer</label>
+                                    <label for="employerName">Work Place (Optional)</label>
                                     <div class="input-container">
-                                        <input type="text" id="employerName" name="employerName" required
-                                               value="<?php echo isset($_SESSION['form_data']['employerName']) ? htmlspecialchars($_SESSION['form_data']['employerName']) : ''; ?>">
+                                        <input type="text" id="employerName" name="employerName"
+                                               value="<?php echo isset($_SESSION['form_data']['employerName']) ? htmlspecialchars($_SESSION['form_data']['employerName']) : ''; ?>"
+                                               oninput="this.value = this.value.toUpperCase()">
                                         <div class="input-highlight"></div>
                                     </div>
                                 </div>
@@ -234,7 +256,8 @@ require_once 'config.php';
                                             <label class="required">Beneficiary Name</label>
                                             <div class="input-container">
                                                 <input type="text" name="beneficiaryName[]" required
-                                                       value="<?php echo isset($_SESSION['form_data']['beneficiaryName'][$i]) ? htmlspecialchars($_SESSION['form_data']['beneficiaryName'][$i]) : ''; ?>">
+                                                       value="<?php echo isset($_SESSION['form_data']['beneficiaryName'][$i]) ? htmlspecialchars($_SESSION['form_data']['beneficiaryName'][$i]) : ''; ?>"
+                                                       oninput="this.value = this.value.toUpperCase()">
                                                 <div class="input-highlight"></div>
                                             </div>
                                         </div>
@@ -242,7 +265,8 @@ require_once 'config.php';
                                             <label class="required">NIC No</label>
                                             <div class="input-container">
                                                 <input type="text" name="beneficiaryNIC[]" required
-                                                       value="<?php echo isset($_SESSION['form_data']['beneficiaryNIC'][$i]) ? htmlspecialchars($_SESSION['form_data']['beneficiaryNIC'][$i]) : ''; ?>">
+                                                       value="<?php echo isset($_SESSION['form_data']['beneficiaryNIC'][$i]) ? htmlspecialchars($_SESSION['form_data']['beneficiaryNIC'][$i]) : ''; ?>"
+                                                       oninput="this.value = this.value.toUpperCase()">
                                                 <div class="input-highlight"></div>
                                             </div>
                                         </div>
@@ -325,16 +349,42 @@ require_once 'config.php';
                 </div>
             </div>
 
+            <div class="form-group" id="gspPlanGroup" style="display: none;">
+                <label for="gspPlan" class="required">GSP Plan</label>
+                <div class="input-container">
+                    <select id="gspPlan" name="gspPlan">
+                        <option value="">Select Plan</option>
+                        <option value="plan1" <?php echo isset($_SESSION['form_data']['gspPlan']) && $_SESSION['form_data']['gspPlan'] == 'plan1' ? 'selected' : ''; ?>>Plan 1</option>
+                        <option value="plan2" <?php echo isset($_SESSION['form_data']['gspPlan']) && $_SESSION['form_data']['gspPlan'] == 'plan2' ? 'selected' : ''; ?>>Plan 2</option>
+                        <option value="plan3" <?php echo isset($_SESSION['form_data']['gspPlan']) && $_SESSION['form_data']['gspPlan'] == 'plan3' ? 'selected' : ''; ?>>Plan 3</option>
+                    </select>
+                    <div class="input-highlight"></div>
+                </div>
+            </div>
 
-            
+            <div class="form-group" id="gspPaymentGroup" style="display: none;">
+                <label for="gspPaymentOption" class="required">Payment Option</label>
+                <div class="input-container">
+                    <select id="gspPaymentOption" name="gspPaymentOption">
+                        <option value="">Select Payment Option</option>
+                        <option value="one_time" <?php echo isset($_SESSION['form_data']['gspPaymentOption']) && $_SESSION['form_data']['gspPaymentOption'] == 'one_time' ? 'selected' : ''; ?>>One time payment (Rs. 200,000)</option>
+                        <option value="5250" <?php echo isset($_SESSION['form_data']['gspPaymentOption']) && $_SESSION['form_data']['gspPaymentOption'] == '5250' ? 'selected' : ''; ?>>5250</option>
+                        <option value="6120" <?php echo isset($_SESSION['form_data']['gspPaymentOption']) && $_SESSION['form_data']['gspPaymentOption'] == '6120' ? 'selected' : ''; ?>>6120</option>
+                        <option value="4600" <?php echo isset($_SESSION['form_data']['gspPaymentOption']) && $_SESSION['form_data']['gspPaymentOption'] == '4600' ? 'selected' : ''; ?>>4600</option>
+                        <option value="3700" <?php echo isset($_SESSION['form_data']['gspPaymentOption']) && $_SESSION['form_data']['gspPaymentOption'] == '3700' ? 'selected' : ''; ?>>3700</option>
+                    </select>
+                    <div class="input-highlight"></div>
+                </div>
+            </div>
 
-
-
-
-
-
-
-
+            <div class="form-group" id="gspMaturityGroup" style="display: none;">
+                <label for="maturityAmount">Maturity Amount (Rs.)</label>
+                <div class="input-container">
+                    <input type="number" id="maturityAmount" name="maturityAmount" readonly
+                           value="<?php echo isset($_SESSION['form_data']['maturityAmount']) ? htmlspecialchars($_SESSION['form_data']['maturityAmount']) : ''; ?>">
+                    <div class="input-highlight"></div>
+                </div>
+            </div>
 
 
 
@@ -386,7 +436,8 @@ require_once 'config.php';
                                     <label for="bank" class="required">Bank</label>
                                     <div class="input-container">
                                         <input type="text" id="bank" name="bank" required
-                                               value="<?php echo isset($_SESSION['form_data']['bank']) ? htmlspecialchars($_SESSION['form_data']['bank']) : ''; ?>">
+                                               value="<?php echo isset($_SESSION['form_data']['bank']) ? htmlspecialchars($_SESSION['form_data']['bank']) : ''; ?>"
+                                               oninput="this.value = this.value.toUpperCase()">
                                         <div class="input-highlight"></div>
                                     </div>
                                 </div>
@@ -394,7 +445,8 @@ require_once 'config.php';
                                     <label for="branch" class="required">Branch</label>
                                     <div class="input-container">
                                         <input type="text" id="branch" name="branch" required
-                                               value="<?php echo isset($_SESSION['form_data']['branch']) ? htmlspecialchars($_SESSION['form_data']['branch']) : ''; ?>">
+                                               value="<?php echo isset($_SESSION['form_data']['branch']) ? htmlspecialchars($_SESSION['form_data']['branch']) : ''; ?>"
+                                               oninput="this.value = this.value.toUpperCase()">
                                         <div class="input-highlight"></div>
                                     </div>
                                 </div>
@@ -402,12 +454,20 @@ require_once 'config.php';
                         </div>
                         
                         <div class="form-section">
+                            <?php
+                            $maxFileSizeBytes = defined('MAX_FILE_SIZE') ? (int)MAX_FILE_SIZE : (3 * 1024 * 1024);
+                            $maxFileSizeMb = defined('MAX_FILE_SIZE_MB') ? (int)MAX_FILE_SIZE_MB : max(1, (int)round($maxFileSizeBytes / (1024 * 1024)));
+                            $fileSizeHint = 'Max ' . $maxFileSizeMb . 'MB • JPG, PNG, PDF';
+                            ?>
                             <div class="section-header">
                                 <div class="section-icon">
                                     <i class="fas fa-file-upload"></i>
                                 </div>
-                                <div class="section-title">
-                                    Upload Required Documents
+                                <div>
+                                    <div class="section-title">
+                                        Upload Required Documents
+                                    </div>
+                                    <p class="section-hint">Each attachment must be <?php echo (int)$maxFileSizeMb; ?>MB or less (JPG, PNG, or PDF).</p>
                                 </div>
                             </div>
                             <div class="form-grid">
@@ -416,12 +476,13 @@ require_once 'config.php';
                                     <div class="file-upload" onclick="document.getElementById('investorId').click()">
                                         <i class="fas fa-id-card"></i>
                                         <p>Upload Investor ID</p>
+                                        <p class="file-size-hint"><?php echo htmlspecialchars($fileSizeHint); ?></p>
                                         <p class="file-info" id="investorIdInfo">
                                             <?php if(isset($_SESSION['form_data']['investorId_name'])): ?>
                                                 Selected: <?php echo htmlspecialchars($_SESSION['form_data']['investorId_name']); ?>
                                             <?php endif; ?>
                                         </p>
-                                        <input type="file" id="investorId" class="file-input" name="investorId" accept="image/*,.pdf" required>
+                                        <input type="file" id="investorId" class="file-input" name="investorId" accept="image/*,.pdf" data-max-size="<?php echo (int)$maxFileSizeBytes; ?>" required>
                                     </div>
                                 </div>
                                 <div class="form-group">
@@ -429,12 +490,13 @@ require_once 'config.php';
                                     <div class="file-upload" onclick="document.getElementById('beneficiaryId').click()">
                                         <i class="fas fa-id-card"></i>
                                         <p>Upload Beneficiary ID</p>
+                                        <p class="file-size-hint"><?php echo htmlspecialchars($fileSizeHint); ?></p>
                                         <p class="file-info" id="beneficiaryIdInfo">
                                             <?php if(isset($_SESSION['form_data']['beneficiaryId_name'])): ?>
                                                 Selected: <?php echo htmlspecialchars($_SESSION['form_data']['beneficiaryId_name']); ?>
                                             <?php endif; ?>
                                         </p>
-                                        <input type="file" id="beneficiaryId" class="file-input" name="beneficiaryId" accept="image/*,.pdf" required>
+                                        <input type="file" id="beneficiaryId" class="file-input" name="beneficiaryId" accept="image/*,.pdf" data-max-size="<?php echo (int)$maxFileSizeBytes; ?>" required>
                                     </div>
                                 </div>
                                 <div class="form-group">
@@ -442,12 +504,13 @@ require_once 'config.php';
                                     <div class="file-upload" onclick="document.getElementById('passbook').click()">
                                         <i class="fas fa-book"></i>
                                         <p>Upload Passbook</p>
+                                        <p class="file-size-hint"><?php echo htmlspecialchars($fileSizeHint); ?></p>
                                         <p class="file-info" id="passbookInfo">
                                             <?php if(isset($_SESSION['form_data']['passbook_name'])): ?>
                                                 Selected: <?php echo htmlspecialchars($_SESSION['form_data']['passbook_name']); ?>
                                             <?php endif; ?>
                                         </p>
-                                        <input type="file" id="passbook" class="file-input" name="passbook" accept="image/*,.pdf" required>
+                                        <input type="file" id="passbook" class="file-input" name="passbook" accept="image/*,.pdf" data-max-size="<?php echo (int)$maxFileSizeBytes; ?>" required>
                                     </div>
                                 </div>
                                 <div class="form-group">
@@ -455,40 +518,43 @@ require_once 'config.php';
                                     <div class="file-upload" onclick="document.getElementById('paymentSlip').click()">
                                         <i class="fas fa-receipt"></i>
                                         <p>Upload Payment Slip</p>
+                                        <p class="file-size-hint"><?php echo htmlspecialchars($fileSizeHint); ?></p>
                                         <p class="file-info" id="paymentSlipInfo">
                                             <?php if(isset($_SESSION['form_data']['paymentSlip_name'])): ?>
                                                 Selected: <?php echo htmlspecialchars($_SESSION['form_data']['paymentSlip_name']); ?>
                                             <?php endif; ?>
                                         </p>
-                                        <input type="file" id="paymentSlip" class="file-input" name="paymentSlip" accept="image/*,.pdf" required>
+                                        <input type="file" id="paymentSlip" class="file-input" name="paymentSlip" accept="image/*,.pdf" data-max-size="<?php echo (int)$maxFileSizeBytes; ?>" required>
                                     </div>
                                 </div>
-                                 <div class="form-group">
-    <label class="required">Proof Documents</label>
-    <div class="file-upload" onclick="document.getElementById('proofDocuments').click()">
-        <i class="fas fa-receipt"></i>
-        <p>Upload Proof Documents</p>
-        <p class="file-info" id="proofDocumentsInfo">
-            <?php if(isset($_SESSION['form_data']['proofDocuments_name'])): ?>
-                Selected: <?php echo htmlspecialchars($_SESSION['form_data']['proofDocuments_name']); ?>
-            <?php endif; ?>
-        </p>
-        <input type="file" id="proofDocuments" class="file-input" name="proofDocuments" accept="image/*,.pdf" required>
-    </div>
-</div>
                                 <div class="form-group">
-    <label class="required">Other Documents</label>
-    <div class="file-upload" onclick="document.getElementById('otherDocuments').click()">
-        <i class="fas fa-receipt"></i>
-        <p>Upload Other Documents</p>
-        <p class="file-info" id="otherDocumentsInfo">
-            <?php if(isset($_SESSION['form_data']['otherDocuments_name'])): ?>
-                Selected: <?php echo htmlspecialchars($_SESSION['form_data']['otherDocuments_name']); ?>
-            <?php endif; ?>
-        </p>
-        <input type="file" id="otherDocuments" class="file-input" name="otherDocuments" accept="image/*,.pdf" required>
-    </div>
-</div>
+                                    <label>Proof Documents (Optional)</label>
+                                    <div class="file-upload" onclick="document.getElementById('proofDocuments').click()">
+                                        <i class="fas fa-receipt"></i>
+                                        <p>Upload Proof Documents</p>
+                                        <p class="file-size-hint"><?php echo htmlspecialchars($fileSizeHint); ?></p>
+                                        <p class="file-info" id="proofDocumentsInfo">
+                                            <?php if(isset($_SESSION['form_data']['proofDocuments_name'])): ?>
+                                                Selected: <?php echo htmlspecialchars($_SESSION['form_data']['proofDocuments_name']); ?>
+                                            <?php endif; ?>
+                                        </p>
+                                        <input type="file" id="proofDocuments" class="file-input" name="proofDocuments" accept="image/*,.pdf" data-max-size="<?php echo (int)$maxFileSizeBytes; ?>">
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="required">Proposal Form</label>
+                                    <div class="file-upload" onclick="document.getElementById('otherDocuments').click()">
+                                        <i class="fas fa-receipt"></i>
+                                        <p>Upload Proposal Form</p>
+                                        <p class="file-size-hint"><?php echo htmlspecialchars($fileSizeHint); ?></p>
+                                        <p class="file-info" id="otherDocumentsInfo">
+                                            <?php if(isset($_SESSION['form_data']['otherDocuments_name'])): ?>
+                                                Selected: <?php echo htmlspecialchars($_SESSION['form_data']['otherDocuments_name']); ?>
+                                            <?php endif; ?>
+                                        </p>
+                                        <input type="file" id="otherDocuments" class="file-input" name="otherDocuments" accept="image/*,.pdf" data-max-size="<?php echo (int)$maxFileSizeBytes; ?>" required>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         
@@ -515,6 +581,18 @@ require_once 'config.php';
             </div>
         </div>
         <div class="form-grid">
+            <div class="form-group">
+                <label for="salesPersonCode" class="required">Sales Person Code</label>
+                <div class="input-container">
+                    <input type="text" id="salesPersonCode" name="salesPersonCode" required
+                           placeholder="Enter your sales person's code"
+                           value="<?php echo isset($_SESSION['form_data']['salesPersonCode']) ? htmlspecialchars($_SESSION['form_data']['salesPersonCode']) : ''; ?>"
+                           oninput="this.value = this.value.toUpperCase(); clearFieldError('salesPersonCode');">
+                    <div class="input-highlight"></div>
+                </div>
+                <span id="salesPersonCodeError" class="field-error"<?php echo empty($_SESSION['field_errors']['salesPersonCode']) ? ' style="display: none;"' : ''; ?>><?php echo !empty($_SESSION['field_errors']['salesPersonCode']) ? htmlspecialchars($_SESSION['field_errors']['salesPersonCode']) : ''; ?></span>
+                <small style="color: #666; margin-top: 5px; display: block;">Enter the code provided by your Serendib Green Plantation sales representative.</small>
+            </div>
             <div class="form-group" style="grid-column: 1 / -1;">
                 <div class="checkbox-group">
                     <input type="checkbox" id="declaration" name="declaration" value="accepted" required>
@@ -549,5 +627,8 @@ require_once 'config.php';
 // Clear form data from session after displaying
 if(isset($_SESSION['form_data'])) {
     unset($_SESSION['form_data']);
+}
+if(isset($_SESSION['field_errors'])) {
+    unset($_SESSION['field_errors']);
 }
 ?>

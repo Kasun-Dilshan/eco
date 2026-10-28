@@ -1,19 +1,66 @@
 <?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
 require_once '../config.php';
 require_once '../db.php';
 
+function reportsEnsureSalesPersonsTable(PDO $db) {
+    try {
+        $db->exec("
+            CREATE TABLE IF NOT EXISTS sales_persons (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                branch VARCHAR(100) NOT NULL,
+                epf_no VARCHAR(20) NOT NULL,
+                sales_code VARCHAR(50) NOT NULL,
+                phone_number VARCHAR(20) NULL,
+                email VARCHAR(255) NULL,
+                sales_rank VARCHAR(100) NULL,
+                reported_sales_person_id INT NULL,
+                status ENUM('active', 'inactive') DEFAULT 'active',
+                created_by INT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY unique_epf_no (epf_no),
+                UNIQUE KEY unique_sales_code (sales_code),
+                INDEX idx_branch (branch),
+                INDEX idx_status (status),
+                INDEX idx_reported_sales_person (reported_sales_person_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+    } catch (PDOException $e) {
+        error_log('reports ensure sales_persons table: ' . $e->getMessage());
+    }
+}
 
+reportsEnsureSalesPersonsTable($db);
 
 // Get date filters
-$start_date = $_GET['start_date'] ?? date('Y-m-01');
-$end_date = $_GET['end_date'] ?? date('Y-m-d');
+$start_date = isset($_GET['start_date']) ? trim((string)$_GET['start_date']) : '';
+$end_date = isset($_GET['end_date']) ? trim((string)$_GET['end_date']) : '';
 $status_filter = $_GET['status'] ?? 'all';
 $investment_type = $_GET['investment_type'] ?? 'all';
+$sales_person_filter = isset($_GET['sales_person_code']) ? trim((string)$_GET['sales_person_code']) : 'all';
 
 // Initialize variables
 $stats = [];
 $chart_data = [];
 $applications = [];
+$status_breakdown = [];
+$type_breakdown = [];
+$sales_person_options = [];
+$sales_person_breakdown = [];
+$chart_months = [];
+$chart_applications = [];
+$chart_amounts = [];
+$chart_approved = [];
+$chart_approved_amounts = [];
+$top_occupations = [];
+$bank_distribution = [];
+$yearly_growth = [];
+$db_error = null;
 
 try {
     // Build WHERE clause for filters
@@ -29,8 +76,13 @@ try {
         $where[] = "investment_type = ?";
         $params[] = $investment_type;
     }
+
+    if ($sales_person_filter !== 'all' && $sales_person_filter !== '') {
+        $where[] = "sales_person_code = ?";
+        $params[] = $sales_person_filter;
+    }
     
-    if ($start_date && $end_date) {
+    if ($start_date !== '' && $end_date !== '') {
         $where[] = "DATE(created_at) BETWEEN ? AND ?";
         $params[] = $start_date;
         $params[] = $end_date;
@@ -46,6 +98,10 @@ try {
             SUM(CASE WHEN status = 'reviewed' THEN 1 ELSE 0 END) as reviewed,
             SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved,
             SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected,
+            SUM(CASE WHEN status = 'pending' THEN investment_amount ELSE 0 END) as pending_amount,
+            SUM(CASE WHEN status = 'reviewed' THEN investment_amount ELSE 0 END) as reviewed_amount,
+            SUM(CASE WHEN status = 'approved' THEN investment_amount ELSE 0 END) as approved_amount,
+            SUM(CASE WHEN status = 'rejected' THEN investment_amount ELSE 0 END) as rejected_amount,
             SUM(investment_amount) as total_investment,
             AVG(investment_amount) as avg_investment,
             MIN(investment_amount) as min_investment,
@@ -71,7 +127,7 @@ try {
             investment_amount,
             investment_type,
             DATE_FORMAT(created_at, '%Y-%m-%d %H:%i') as created_date,
-            DATE_FORMAT(status, '%Y-%m-%d') as status
+            DATE_FORMAT(created_at, '%Y-%m-%d') as created_day
         FROM investors 
         $where_clause
         ORDER BY created_at DESC
@@ -150,23 +206,122 @@ try {
     $bank_distribution = $stmt->fetchAll();
     
     // Get yearly growth
+    // Avoid window functions for broader MySQL compatibility
     $yearly_query = "
         SELECT 
-            YEAR(created_at) as year,
-            COUNT(*) as applications,
-            SUM(investment_amount) as total_amount,
-            (SUM(investment_amount) - LAG(SUM(investment_amount)) OVER (ORDER BY YEAR(created_at))) / LAG(SUM(investment_amount)) OVER (ORDER BY YEAR(created_at)) * 100 as growth_rate
-        FROM investors 
-        GROUP BY YEAR(created_at)
-        ORDER BY year
+            curr.year as year,
+            curr.applications as applications,
+            curr.total_amount as total_amount,
+            CASE 
+                WHEN prev.total_amount IS NULL OR prev.total_amount = 0 THEN NULL
+                ELSE ( (curr.total_amount - prev.total_amount) / prev.total_amount ) * 100
+            END as growth_rate
+        FROM (
+            SELECT 
+                YEAR(created_at) as year,
+                COUNT(*) as applications,
+                SUM(investment_amount) as total_amount
+            FROM investors
+            GROUP BY YEAR(created_at)
+        ) curr
+        LEFT JOIN (
+            SELECT 
+                YEAR(created_at) as year,
+                SUM(investment_amount) as total_amount
+            FROM investors
+            GROUP BY YEAR(created_at)
+        ) prev ON prev.year = curr.year - 1
+        ORDER BY curr.year
     ";
     
     $stmt = $db->prepare($yearly_query);
     $stmt->execute();
     $yearly_growth = $stmt->fetchAll();
+
+    // Breakdown by status (counts + amounts) with filters
+    $status_breakdown_query = "
+        SELECT
+            status,
+            COUNT(*) as applications,
+            SUM(investment_amount) as total_amount,
+            AVG(investment_amount) as avg_amount,
+            MIN(investment_amount) as min_amount,
+            MAX(investment_amount) as max_amount
+        FROM investors
+        $where_clause
+        GROUP BY status
+        ORDER BY applications DESC
+    ";
+    $stmt = $db->prepare($status_breakdown_query);
+    $stmt->execute($params);
+    $status_breakdown = $stmt->fetchAll();
+
+    // Breakdown by investment plan/type (counts + amounts) with filters
+    $type_breakdown_query = "
+        SELECT
+            investment_type,
+            COUNT(*) as applications,
+            SUM(investment_amount) as total_amount,
+            AVG(investment_amount) as avg_amount,
+            MIN(investment_amount) as min_amount,
+            MAX(investment_amount) as max_amount
+        FROM investors
+        WHERE investment_type IS NOT NULL AND investment_type != ''
+        " . ($where ? " AND " . implode(" AND ", $where) : "") . "
+        GROUP BY investment_type
+        ORDER BY total_amount DESC
+    ";
+    $stmt = $db->prepare($type_breakdown_query);
+    $stmt->execute($params);
+    $type_breakdown = $stmt->fetchAll();
+
+    // Sales person data (isolated so a missing table/column does not block the page)
+    try {
+        $sales_person_options_query = "
+            SELECT sales_code, name
+            FROM sales_persons
+            WHERE status = 'active'
+            ORDER BY name ASC
+        ";
+        $stmt = $db->prepare($sales_person_options_query);
+        $stmt->execute();
+        $sales_person_options = $stmt->fetchAll();
+
+        $sales_person_where = array_merge(
+            ["i.sales_person_code IS NOT NULL", "i.sales_person_code != ''"],
+            array_map(function ($condition) {
+                return str_replace(
+                    ['status', 'investment_type', 'created_at', 'sales_person_code'],
+                    ['i.status', 'i.investment_type', 'i.created_at', 'i.sales_person_code'],
+                    $condition
+                );
+            }, $where)
+        );
+        $sales_person_breakdown_query = "
+            SELECT
+                i.sales_person_code,
+                COALESCE(sp.name, i.sales_person_code) AS sales_person_name,
+                COUNT(*) AS investment_count,
+                SUM(i.investment_amount) AS total_amount,
+                AVG(i.investment_amount) AS avg_amount
+            FROM investors i
+            LEFT JOIN sales_persons sp ON sp.sales_code = i.sales_person_code
+            WHERE " . implode(' AND ', $sales_person_where) . "
+            GROUP BY i.sales_person_code, sp.name
+            ORDER BY total_amount DESC
+        ";
+        $stmt = $db->prepare($sales_person_breakdown_query);
+        $stmt->execute($params);
+        $sales_person_breakdown = $stmt->fetchAll();
+    } catch (PDOException $e) {
+        error_log('reports sales person queries: ' . $e->getMessage());
+        $sales_person_options = [];
+        $sales_person_breakdown = [];
+    }
     
 } catch (PDOException $e) {
-    die("Database error: " . $e->getMessage());
+    error_log('reports.php database error: ' . $e->getMessage());
+    $db_error = 'Unable to load report data. Please try again or contact support.';
 }
 
 // Function to generate PDF report
@@ -178,7 +333,7 @@ function generatePDFReport($type, $data, $filters) {
     
     // Set document properties
     $pdf->SetCreator(PDF_CREATOR);
-    $pdf->SetAuthor('EcoWealth Finance');
+    $pdf->SetAuthor('SERENDIB GREEN PLANTATION PVT LTD');
     $pdf->SetTitle('Business Report - ' . ucfirst($type));
     $pdf->SetSubject('Business Analytics Report');
     
@@ -279,7 +434,9 @@ function addFinancialReport($pdf, $data) {
 // Handle PDF generation request
 if (isset($_GET['generate_pdf'])) {
     $report_type = $_GET['report_type'] ?? 'summary';
-    $filters = "Period: $start_date to $end_date | Status: $status_filter";
+    $periodText = ($start_date !== '' && $end_date !== '') ? "$start_date to $end_date" : "All time";
+    $salesPersonText = ($sales_person_filter !== 'all' && $sales_person_filter !== '') ? $sales_person_filter : 'All';
+    $filters = "Period: $periodText | Status: $status_filter | Sales Person: $salesPersonText";
     generatePDFReport($report_type, $stats, $filters);
 }
 ?>
@@ -288,7 +445,7 @@ if (isset($_GET['generate_pdf'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reports & Analytics | EcoWealth Admin</title>
+    <title>Reports & Analytics | SERENDIB GREEN PLANTATION PVT LTD Admin</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -329,6 +486,14 @@ if (isset($_GET['generate_pdf'])) {
             background: rgba(10, 47, 29, 0.9);
             border-right: 1px solid rgba(34, 197, 94, 0.2);
             padding: 20px 0;
+            position: sticky;
+            top: 0;
+            align-self: flex-start;
+            max-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            z-index: 100;
         }
         
         .sidebar-header {
@@ -346,6 +511,13 @@ if (isset($_GET['generate_pdf'])) {
             gap: 10px;
         }
         
+        .sidebar-nav {
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
         .sidebar-nav ul {
             list-style: none;
         }
@@ -607,6 +779,7 @@ if (isset($_GET['generate_pdf'])) {
             border: 1px solid rgba(34, 197, 94, 0.2);
             border-radius: 10px;
             padding: 20px;
+            overflow-x: auto;
         }
         
         .table-container h3 {
@@ -621,6 +794,7 @@ if (isset($_GET['generate_pdf'])) {
         .data-table {
             width: 100%;
             border-collapse: collapse;
+            min-width: 560px;
         }
         
         .data-table th {
@@ -630,12 +804,14 @@ if (isset($_GET['generate_pdf'])) {
             text-align: left;
             font-weight: 600;
             border-bottom: 1px solid rgba(34, 197, 94, 0.3);
+            white-space: nowrap;
         }
         
         .data-table td {
             padding: 12px;
             border-bottom: 1px solid rgba(34, 197, 94, 0.1);
             color: var(--text-muted);
+            white-space: nowrap;
         }
         
         .data-table tr:hover {
@@ -709,6 +885,8 @@ if (isset($_GET['generate_pdf'])) {
             
             .sidebar {
                 width: 100%;
+                position: static;
+                height: auto;
                 border-right: none;
                 border-bottom: 1px solid rgba(34, 197, 94, 0.2);
             }
@@ -735,7 +913,7 @@ if (isset($_GET['generate_pdf'])) {
         <div class="sidebar">
             <div class="sidebar-header">
                 <h2><i class="fas fa-chart-line"></i> EcoWealth Analytics</h2>
-                <p>Welcome, <?php echo htmlspecialchars($_SESSION['admin_name'] ?? 'Admin'); ?></p>
+                <p>Welcome, <?php echo htmlspecialchars($_SESSION['full_name'] ?? $_SESSION['admin_name'] ?? 'Admin'); ?></p>
             </div>
             
             <nav class="sidebar-nav">
@@ -753,6 +931,11 @@ if (isset($_GET['generate_pdf'])) {
                     <li class="active">
                         <a href="reports.php">
                             <i class="fas fa-chart-bar"></i> Reports & Analytics
+                        </a>
+                    </li>
+                    <li>
+                        <a href="sales_person_business.php">
+                            <i class="fas fa-user-tie"></i> Sales Person Business
                         </a>
                     </li>
                     <li>
@@ -774,6 +957,12 @@ if (isset($_GET['generate_pdf'])) {
                     </a>
                 </div>
             </div>
+
+            <?php if ($db_error): ?>
+            <div class="filter-section" style="border-color: var(--error); background: rgba(239, 68, 68, 0.1);">
+                <p style="color: #fecaca; margin: 0;"><i class="fas fa-exclamation-circle"></i> <?php echo htmlspecialchars($db_error); ?></p>
+            </div>
+            <?php endif; ?>
             
             <!-- Filter Section -->
             <div class="filter-section">
@@ -781,11 +970,11 @@ if (isset($_GET['generate_pdf'])) {
                     <div class="filter-grid">
                         <div class="filter-group">
                             <label><i class="fas fa-calendar"></i> Start Date</label>
-                            <input type="date" name="start_date" value="<?php echo $start_date; ?>" required>
+                            <input type="date" name="start_date" value="<?php echo htmlspecialchars($start_date); ?>">
                         </div>
                         <div class="filter-group">
                             <label><i class="fas fa-calendar"></i> End Date</label>
-                            <input type="date" name="end_date" value="<?php echo $end_date; ?>" required>
+                            <input type="date" name="end_date" value="<?php echo htmlspecialchars($end_date); ?>">
                         </div>
                         <div class="filter-group">
                             <label><i class="fas fa-filter"></i> Status</label>
@@ -807,6 +996,17 @@ if (isset($_GET['generate_pdf'])) {
                                 <option value="GOLD" <?php echo $investment_type === 'GOLD' ? 'selected' : ''; ?>>Gold plan</option>
                                 <option value="SFPS" <?php echo $investment_type === 'SFPS' ? 'selected' : ''; ?>>Seraa farm profit share plan</option>
                                 <option value="SFHPS" <?php echo $investment_type === 'SFHPS' ? 'selected' : ''; ?>>Seraa farm high profit share plan</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label><i class="fas fa-user-tie"></i> Sales Person Code</label>
+                            <select name="sales_person_code">
+                                <option value="all" <?php echo $sales_person_filter === 'all' ? 'selected' : ''; ?>>All Sales Persons</option>
+                                <?php foreach ($sales_person_options as $sp): ?>
+                                <option value="<?php echo htmlspecialchars($sp['sales_code']); ?>" <?php echo $sales_person_filter === $sp['sales_code'] ? 'selected' : ''; ?>>
+                                    <?php echo htmlspecialchars($sp['sales_code'] . ' - ' . $sp['name']); ?>
+                                </option>
+                                <?php endforeach; ?>
                             </select>
                         </div>
                     </div>
@@ -899,6 +1099,103 @@ if (isset($_GET['generate_pdf'])) {
                     <i class="fas fa-table"></i> Data Analysis
                 </h2>
                 <div class="table-grid">
+                    <div class="table-container">
+                        <h3><i class="fas fa-layer-group"></i> Applications by Status (Counts & Amounts)</h3>
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Status</th>
+                                    <th>Applications</th>
+                                    <th>Total Amount</th>
+                                    <th>Avg</th>
+                                    <th>Min</th>
+                                    <th>Max</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($status_breakdown as $row): ?>
+                                <tr>
+                                    <td><?php echo htmlspecialchars(ucfirst($row['status'])); ?></td>
+                                    <td><?php echo (int)$row['applications']; ?></td>
+                                    <td>Rs. <?php echo number_format((float)$row['total_amount'], 2); ?></td>
+                                    <td>Rs. <?php echo number_format((float)$row['avg_amount'], 2); ?></td>
+                                    <td>Rs. <?php echo number_format((float)$row['min_amount'], 2); ?></td>
+                                    <td>Rs. <?php echo number_format((float)$row['max_amount'], 2); ?></td>
+                                </tr>
+                                <?php endforeach; ?>
+                                <?php if (empty($status_breakdown)): ?>
+                                <tr>
+                                    <td colspan="6">No data for selected filters.</td>
+                                </tr>
+                                <?php endif; ?>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="table-container">
+                        <h3><i class="fas fa-user-tie"></i> Investments by Sales Person Code</h3>
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Sales Person Code</th>
+                                    <th>Name</th>
+                                    <th>No. of Investments</th>
+                                    <th>Total Amount</th>
+                                    <th>Avg. Investment</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($sales_person_breakdown as $row): ?>
+                                <tr>
+                                    <td><?php echo htmlspecialchars($row['sales_person_code']); ?></td>
+                                    <td><?php echo htmlspecialchars($row['sales_person_name']); ?></td>
+                                    <td><?php echo (int)$row['investment_count']; ?></td>
+                                    <td>Rs. <?php echo number_format((float)$row['total_amount'], 2); ?></td>
+                                    <td>Rs. <?php echo number_format((float)$row['avg_amount'], 2); ?></td>
+                                </tr>
+                                <?php endforeach; ?>
+                                <?php if (empty($sales_person_breakdown)): ?>
+                                <tr>
+                                    <td colspan="5">No investments found for selected filters.</td>
+                                </tr>
+                                <?php endif; ?>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="table-container">
+                        <h3><i class="fas fa-money-check-dollar"></i> Applications by Investment Plan (Counts & Amounts)</h3>
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Plan</th>
+                                    <th>Applications</th>
+                                    <th>Total Amount</th>
+                                    <th>Avg</th>
+                                    <th>Min</th>
+                                    <th>Max</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($type_breakdown as $row): ?>
+                                <tr>
+                                    <td><?php echo htmlspecialchars($row['investment_type']); ?></td>
+                                    <td><?php echo (int)$row['applications']; ?></td>
+                                    <td>Rs. <?php echo number_format((float)$row['total_amount'], 2); ?></td>
+                                    <td>Rs. <?php echo number_format((float)$row['avg_amount'], 2); ?></td>
+                                    <td>Rs. <?php echo number_format((float)$row['min_amount'], 2); ?></td>
+                                    <td>Rs. <?php echo number_format((float)$row['max_amount'], 2); ?></td>
+                                </tr>
+                                <?php endforeach; ?>
+                                <?php if (empty($type_breakdown)): ?>
+                                <tr>
+                                    <td colspan="6">No data for selected filters.</td>
+                                </tr>
+                                <?php endif; ?>
+                            </tbody>
+                        </table>
+                    </div>
+
                     <div class="table-container">
                         <h3><i class="fas fa-user-tie"></i> Top Occupations</h3>
                         <table class="data-table">
@@ -1017,7 +1314,7 @@ if (isset($_GET['generate_pdf'])) {
                         </div>
                         <h3>Executive Summary</h3>
                         <p>Generate a comprehensive executive summary report with key metrics and insights.</p>
-                        <a href="?generate_pdf=1&report_type=summary&start_date=<?php echo $start_date; ?>&end_date=<?php echo $end_date; ?>&status=<?php echo $status_filter; ?>" class="btn btn-primary">
+                        <a href="?generate_pdf=1&report_type=summary&start_date=<?php echo urlencode($start_date); ?>&end_date=<?php echo urlencode($end_date); ?>&status=<?php echo urlencode($status_filter); ?>&sales_person_code=<?php echo urlencode($sales_person_filter); ?>" class="btn btn-primary">
                             <i class="fas fa-download"></i> Download PDF
                         </a>
                     </div>
@@ -1028,7 +1325,7 @@ if (isset($_GET['generate_pdf'])) {
                         </div>
                         <h3>Financial Report</h3>
                         <p>Detailed financial analysis including revenue, growth, and investment patterns.</p>
-                        <a href="?generate_pdf=1&report_type=financial&start_date=<?php echo $start_date; ?>&end_date=<?php echo $end_date; ?>&status=<?php echo $status_filter; ?>" class="btn btn-warning">
+                        <a href="?generate_pdf=1&report_type=financial&start_date=<?php echo urlencode($start_date); ?>&end_date=<?php echo urlencode($end_date); ?>&status=<?php echo urlencode($status_filter); ?>&sales_person_code=<?php echo urlencode($sales_person_filter); ?>" class="btn btn-warning">
                             <i class="fas fa-download"></i> Download PDF
                         </a>
                     </div>
@@ -1039,7 +1336,7 @@ if (isset($_GET['generate_pdf'])) {
                         </div>
                         <h3>Demographics Report</h3>
                         <p>Client demographics analysis including occupations, locations, and age groups.</p>
-                        <a href="?generate_pdf=1&report_type=demographics&start_date=<?php echo $start_date; ?>&end_date=<?php echo $end_date; ?>&status=<?php echo $status_filter; ?>" class="btn btn-info">
+                        <a href="?generate_pdf=1&report_type=demographics&start_date=<?php echo urlencode($start_date); ?>&end_date=<?php echo urlencode($end_date); ?>&status=<?php echo urlencode($status_filter); ?>&sales_person_code=<?php echo urlencode($sales_person_filter); ?>" class="btn btn-info">
                             <i class="fas fa-download"></i> Download PDF
                         </a>
                     </div>
@@ -1050,7 +1347,7 @@ if (isset($_GET['generate_pdf'])) {
                         </div>
                         <h3>Detailed Report</h3>
                         <p>Complete detailed report with all data, charts, and comprehensive analysis.</p>
-                        <a href="?generate_pdf=1&report_type=detailed&start_date=<?php echo $start_date; ?>&end_date=<?php echo $end_date; ?>&status=<?php echo $status_filter; ?>" class="btn btn-danger">
+                        <a href="?generate_pdf=1&report_type=detailed&start_date=<?php echo urlencode($start_date); ?>&end_date=<?php echo urlencode($end_date); ?>&status=<?php echo urlencode($status_filter); ?>&sales_person_code=<?php echo urlencode($sales_person_filter); ?>" class="btn btn-danger">
                             <i class="fas fa-download"></i> Download PDF
                         </a>
                     </div>

@@ -138,7 +138,7 @@ try {
     $html .= '</table>
         
         <div style="margin-top: 30px; font-size: 10px; color: #666;">
-            <p>EcoWealth Finance - Sustainable Investment Solutions</p>
+            <p>SERENDIB GREEN PLANTATION PVT LTD - Sustainable Investment Solutions</p>
             <p>Generated on ' . date('F d, Y H:i:s') . '</p>
         </div>
     </body>

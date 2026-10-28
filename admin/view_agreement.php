@@ -1,6 +1,7 @@
 <?php
 require_once '../config.php';
 require_once '../db.php';
+require_once '../includes/agreement_helpers.php';
 
 session_start();
 
@@ -37,6 +38,8 @@ try {
         header('Location: agreements.php');
         exit();
     }
+
+    $displayAgreementNumber = resolveAgreementDisplayNumber($agreement, (int)$agreementId);
     
     // Get agreement logs
     $logStmt = $db->prepare("
@@ -141,7 +144,7 @@ function getStatusBadge($status) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>View Agreement | EcoWealth Admin</title>
+    <title>View Agreement | SERENDIB GREEN PLANTATION PVT LTD Admin</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
@@ -494,8 +497,14 @@ function getStatusBadge($status) {
                 <a href="agreements.php" class="btn btn-secondary">
                     <i class="fas fa-arrow-left"></i> Back
                 </a>
-                <a href="generate_pdf.php?agreement_id=<?php echo $agreementId; ?>" class="btn btn-primary" target="_blank">
-                    <i class="fas fa-download"></i> Download PDF
+                <a href="preview_agreement.php?id=<?php echo $agreementId; ?>" class="btn btn-secondary" target="_blank">
+                    <i class="fas fa-eye"></i> Preview
+                </a>
+                <a href="generate_agreement_pdf.php?id=<?php echo $agreementId; ?>" class="btn btn-secondary" target="_blank">
+                    <i class="fas fa-file-pdf"></i> Download PDF (H0345)
+                </a>
+                <a href="preview_agreement.php?id=<?php echo $agreementId; ?>&print=1" class="btn btn-primary" target="_blank">
+                    <i class="fas fa-print"></i> Print Agreement
                 </a>
             </div>
         </div>
@@ -517,7 +526,7 @@ function getStatusBadge($status) {
                 </div>
                 <div class="info-row">
                     <span class="info-label">Agreement Number</span>
-                    <span class="info-value"><?php echo htmlspecialchars($agreement['agreement_number']); ?></span>
+                    <span class="info-value"><?php echo htmlspecialchars($displayAgreementNumber); ?></span>
                 </div>
                 <div class="info-row">
                     <span class="info-label">Status</span>
@@ -672,9 +681,20 @@ function getStatusBadge($status) {
                         <i class="fas fa-eye"></i>
                     </div>
                     <h3>Preview</h3>
-                    <p>View agreement preview</p>
+                    <p>View agreement in browser</p>
                     <button type="button" class="btn btn-primary" style="margin-top: 15px;">
-                        <i class="fas fa-eye"></i> Preview
+                        <i class="fas fa-eye"></i> Open
+                    </button>
+                </a>
+
+                <a href="preview_agreement.php?id=<?php echo $agreementId; ?>&print=1" class="action-card" target="_blank">
+                    <div class="action-icon">
+                        <i class="fas fa-print"></i>
+                    </div>
+                    <h3>Print Agreement</h3>
+                    <p>Print agreement from browser preview</p>
+                    <button type="button" class="btn btn-primary" style="margin-top: 15px;">
+                        <i class="fas fa-print"></i> Print
                     </button>
                 </a>
             </div>

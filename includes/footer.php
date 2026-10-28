@@ -9,7 +9,7 @@ function cleanup() {
 
 // Function to send confirmation email
 function sendConfirmationEmail($email, $name, $reference_no) {
-    $subject = "EcoWealth Investment Application Confirmation";
+    $subject = "SERENDIB GREEN PLANTATION PVT LTD Investment Application Confirmation";
     
     $message = "
     <html>
@@ -27,12 +27,12 @@ function sendConfirmationEmail($email, $name, $reference_no) {
     <body>
         <div class='container'>
             <div class='header'>
-                <h2>EcoWealth Finance</h2>
+                <h2>SERENDIB GREEN PLANTATION PVT LTD</h2>
                 <h3>Green Investor Portal</h3>
             </div>
             <div class='content'>
                 <h4>Dear $name,</h4>
-                <p>Thank you for submitting your investment application to EcoWealth Finance.</p>
+                <p>Thank you for submitting your investment application to SERENDIB GREEN PLANTATION PVT LTD.</p>
                 
                 <div class='reference'>
                     <strong>Application Reference Number:</strong><br>
@@ -54,7 +54,7 @@ function sendConfirmationEmail($email, $name, $reference_no) {
             </div>
             <div class='footer'>
                 <p>This is an automated email. Please do not reply to this message.</p>
-                <p>© " . date('Y') . " EcoWealth Finance. All rights reserved.</p>
+                <p>© " . date('Y') . " SERENDIB GREEN PLANTATION PVT LTD. All rights reserved.</p>
             </div>
         </div>
     </body>
@@ -64,7 +64,7 @@ function sendConfirmationEmail($email, $name, $reference_no) {
     // For production, use a proper mailer like PHPMailer
     $headers = "MIME-Version: 1.0" . "\r\n";
     $headers .= "Content-type:text/html;charset=UTF-8" . "\r\n";
-    $headers .= "From: EcoWealth Finance <noreply@ecowealth.com>" . "\r\n";
+    $headers .= "From: SERENDIB GREEN PLANTATION PVT LTD <noreply@ecowealth.com>" . "\r\n";
     
     return mail($email, $subject, $message, $headers);
 }

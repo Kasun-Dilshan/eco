@@ -1,9 +1,16 @@
 <?php
 require_once '../config.php';
 require_once '../db.php';
+require_once dirname(__DIR__) . '/includes/agreement_helpers.php';
 
 session_start();
 
+
+// Check if user is logged in as admin or approver
+if (!isset($_SESSION['user_id']) && !isset($_SESSION['approver_id']) && !isset($_SESSION['admin_id'])) {
+    header('Location: index.php');
+    exit();
+}
 
 
 // Initialize variables
@@ -15,9 +22,52 @@ $page = $_GET['page'] ?? 1;
 $limit = 20;
 $offset = ($page - 1) * $limit;
 
+// Get approved applications (for quick agreement generation)
+try {
+    $approvedQuery = "
+        SELECT i.id, i.full_name, i.nic_no, i.email, i.tel_no, i.investment_type, i.years,
+               DATE_FORMAT(i.updated_at, '%M %d, %Y %H:%i') as formatted_updated
+        FROM investors i
+        WHERE i.status = 'approved'
+    ";
+
+    $approvedParams = [];
+    if (!empty($search)) {
+        $approvedQuery .= " AND (i.full_name LIKE ? OR i.nic_no LIKE ? OR i.email LIKE ?)";
+        $searchParam = "%$search%";
+        $approvedParams = [$searchParam, $searchParam, $searchParam];
+    }
+
+    $approvedQuery .= " ORDER BY i.updated_at DESC, i.id DESC LIMIT 20";
+
+    $approvedStmt = $db->prepare($approvedQuery);
+    $approvedStmt->execute($approvedParams);
+    $approvedApplications = $approvedStmt->fetchAll();
+} catch (Throwable $e) {
+    $approvedApplications = [];
+}
+
 // Handle actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['delete_agreement'])) {
+    if (isset($_POST['sync_hpp_agreements'])) {
+        $adminName = $_SESSION['admin_name'] ?? $_SESSION['user_name'] ?? $_SESSION['approver_name'] ?? 'Admin';
+        try {
+            $sync = syncApprovedHppAgreements($db, $adminName);
+            $message = sprintf(
+                'High Profit agreements synced: %d investor(s), %d created, %d updated.',
+                (int)$sync['total'],
+                (int)$sync['created'],
+                (int)$sync['updated']
+            );
+            if (!empty($sync['errors'])) {
+                $message .= ' Errors: ' . implode('; ', $sync['errors']);
+            }
+            $messageType = empty($sync['errors']) ? 'success' : 'error';
+        } catch (Throwable $e) {
+            $message = 'Sync failed: ' . $e->getMessage();
+            $messageType = 'error';
+        }
+    } elseif (isset($_POST['delete_agreement'])) {
         $agreementId = $_POST['agreement_id'] ?? 0;
         $adminName = $_SESSION['admin_name'] ?? 'Admin';
         
@@ -141,7 +191,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $body .= "This is a reminder that your investment agreement " . $agreement['agreement_number'];
                     $body .= " is pending your signature.\n\n";
                     $body .= "Please sign the agreement at your earliest convenience.\n\n";
-                    $body .= "Best regards,\nEcoWealth Finance Team";
+                    $body .= "Best regards,\nSERENDIB GREEN PLANTATION PVT LTD";
                     
                     // In real implementation, send actual email
                     $message = "Reminder sent to " . $agreement['email'] . "!";
@@ -292,7 +342,7 @@ function getInvestmentTypeName($type) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Manage Agreements | EcoWealth Admin</title>
+    <title>Manage Agreements | SERENDIB GREEN PLANTATION PVT LTD Admin</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
@@ -949,6 +999,11 @@ function getInvestmentTypeName($type) {
                 </div>
                 
                 <div class="header-actions">
+                    <form method="POST" action="" style="display:inline;" onsubmit="return confirm('Apply High Profit agreement template to all approved HPP investments?');">
+                        <button type="submit" name="sync_hpp_agreements" class="btn btn-secondary">
+                            <i class="fas fa-sync"></i> Sync HPP Agreements
+                        </button>
+                    </form>
                     <a href="applications.php" class="btn btn-secondary">
                         <i class="fas fa-arrow-left"></i> Applications
                     </a>
@@ -1053,6 +1108,49 @@ function getInvestmentTypeName($type) {
                     </div>
                 </form>
             </div>
+
+            <!-- Approved Applications (ready for agreement generation) -->
+            <div class="agreements-table" style="margin-bottom: 30px;">
+                <div class="table-header" style="grid-template-columns: 1fr 2fr 2fr 1fr;">
+                    <div>Application ID</div>
+                    <div>Investor</div>
+                    <div>Investment</div>
+                    <div>Action</div>
+                </div>
+
+                <?php if (!empty($approvedApplications)): ?>
+                    <?php foreach ($approvedApplications as $app): ?>
+                        <div class="table-row" style="grid-template-columns: 1fr 2fr 2fr 1fr;">
+                            <div>
+                                <strong><?php echo str_pad((int)$app['id'], 6, '0', STR_PAD_LEFT); ?></strong><br>
+                                <small style="color: var(--text-muted); font-size: 12px;">
+                                    Updated: <?php echo htmlspecialchars($app['formatted_updated'] ?? ''); ?>
+                                </small>
+                            </div>
+                            <div>
+                                <strong><?php echo htmlspecialchars($app['full_name'] ?? ''); ?></strong><br>
+                                <small style="color: var(--text-muted);"><?php echo htmlspecialchars($app['nic_no'] ?? ''); ?></small><br>
+                                <small style="color: var(--text-muted); font-size: 12px;"><?php echo htmlspecialchars($app['email'] ?? ''); ?></small>
+                            </div>
+                            <div>
+                                <div style="font-weight: 700;"><?php echo getInvestmentTypeName($app['investment_type'] ?? ''); ?></div>
+                                <small style="color: var(--text-muted);"><?php echo htmlspecialchars(($app['years'] ?? 'N/A') . ' years'); ?></small>
+                            </div>
+                            <div>
+                                <a class="btn btn-primary" style="padding: 10px 14px; font-size: 13px; border-radius: 10px;"
+                                   href="agreement_redirect.php?application_id=<?php echo (int)$app['id']; ?>">
+                                    <i class="fas fa-file-contract"></i> Agreement
+                                </a>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                <?php else: ?>
+                    <div class="empty-state" style="padding: 35px 20px;">
+                        <div style="font-weight: 800; color: var(--text); margin-bottom: 6px;">No approved applications found</div>
+                        <div style="color: var(--text-muted);">Approved applications will appear here for agreement generation.</div>
+                    </div>
+                <?php endif; ?>
+            </div>
             
             <!-- Agreements Table -->
             <div class="agreements-table">
@@ -1113,8 +1211,14 @@ function getInvestmentTypeName($type) {
                                     <a href="view_agreement.php?id=<?php echo $agreement['id']; ?>" class="dropdown-item">
                                         <i class="fas fa-eye"></i> View Agreement
                                     </a>
-                                    <a href="download_agreement.php?id=<?php echo $agreement['id']; ?>" class="dropdown-item">
-                                        <i class="fas fa-download"></i> Download PDF
+                                    <a href="preview_agreement.php?id=<?php echo $agreement['id']; ?>" class="dropdown-item" target="_blank">
+                                        <i class="fas fa-eye"></i> Preview
+                                    </a>
+                                    <a href="generate_agreement_pdf.php?id=<?php echo $agreement['id']; ?>" class="dropdown-item" target="_blank">
+                                        <i class="fas fa-file-pdf"></i> Download PDF (H0345)
+                                    </a>
+                                    <a href="preview_agreement.php?id=<?php echo $agreement['id']; ?>&print=1" class="dropdown-item" target="_blank">
+                                        <i class="fas fa-print"></i> Print Agreement
                                     </a>
                                     <?php if ($agreement['display_status'] === 'draft' || $agreement['display_status'] === 'sent'): ?>
                                         <form method="POST" action="" style="display: inline;" onsubmit="return confirm('Send reminder email to investor?')">

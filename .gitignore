@@ -1,0 +1,6 @@
+/dist/
+/dist-tmp/
+/debug.log
+/logs/*.log
+/uploads/*
+!/uploads/.htaccess

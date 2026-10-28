@@ -201,7 +201,7 @@ function generatePDFContent($application, $beneficiaries) {
     $html .= '</div>
         
         <div class="footer">
-            <p><strong>EcoWealth Finance</strong> | Sustainable Investment Solutions</p>
+            <p><strong>SERENDIB GREEN PLANTATION PVT LTD</strong> | Sustainable Investment Solutions</p>
             <p>This is a complete application report. See included files for all documents.</p>
         </div>
     </body>
@@ -306,8 +306,8 @@ function generateReadmeContent($application, $beneficiaries) {
     $content .= "This package contains all files related to the investment application.\n";
     $content .= "Files are organized for easy reference and record keeping.\n";
     $content .= "\n";
-    $content .= "EcoWealth Finance - Sustainable Investing for a Brighter Future\n";
-    $content .= "© " . date('Y') . " EcoWealth Finance. All rights reserved.\n";
+    $content .= "SERENDIB GREEN PLANTATION PVT LTD - Sustainable Investing for a Brighter Future\n";
+    $content .= "© " . date('Y') . " SERENDIB GREEN PLANTATION PVT LTD. All rights reserved.\n";
     
     return $content;
 }

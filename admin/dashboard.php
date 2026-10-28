@@ -703,9 +703,11 @@ $recentApplications = $stmt->fetchAll();
         /* Premium Stats Grid */
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(20px, 1fr));
+            /* Prevent ultra-narrow cards that squash content */
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
             gap: 25px;
             margin-bottom: 40px;
+            align-items: stretch;
         }
         
         .stat-card {
@@ -1364,6 +1366,14 @@ $recentApplications = $stmt->fetchAll();
                             <?php endif; ?>
                         </a>
                     </li>
+                    <?php if (!$isApprover && ($userType === 'admin')): ?>
+                    <li>
+                        <a href="add_old_investment.php">
+                            <i class="nav-icon fas fa-history"></i>
+                            <span>Add Old Investment</span>
+                        </a>
+                    </li>
+                    <?php endif; ?>
                     <li>
                         <a href="send_email.php">
                             <i class="nav-icon fas fa-envelope"></i>
@@ -1376,24 +1386,32 @@ $recentApplications = $stmt->fetchAll();
                             <span>Reports</span>
                         </a>
                     </li>
-                    <li>
-    <a href="agreement_templates.php">
-        <span class="nav-icon"><i class="fas fa-file-alt"></i></span>
-        <span>Agreement Templates</span>
-    </a>
-</li>
 <li>
     <a href="agreements.php">
         <span class="nav-icon"><i class="fas fa-file-contract"></i></span>
         <span>Agreements</span>
     </a>
 </li>
+                    <?php if (!$isApprover && ($userType === 'admin')): ?>
                     <li>
-                        <a href="users.php">
+                        <a href="feedback.php">
+                            <i class="nav-icon fas fa-comments"></i>
+                            <span>Feedback</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="manage_users.php">
                             <i class="nav-icon fas fa-users"></i>
                             <span>Users</span>
                         </a>
                     </li>
+                    <li>
+                        <a href="sales_persons.php">
+                            <i class="nav-icon fas fa-user-tie"></i>
+                            <span>Sales Persons</span>
+                        </a>
+                    </li>
+                    <?php endif; ?>
                     <li>
                         <a href="settings.php">
                             <i class="nav-icon fas fa-cog"></i>

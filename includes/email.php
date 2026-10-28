@@ -97,13 +97,13 @@ class EmailSender {
         <body>
             <div class="container">
                 <div class="header">
-                    <h2>EcoWealth Finance</h2>
+                    <h2>SERENDIB GREEN PLANTATION PVT LTD</h2>
                 </div>
                 <div class="content">
                     ' . $body . '
                 </div>
                 <div class="footer">
-                    <p>© ' . date('Y') . ' EcoWealth Finance. All rights reserved.</p>
+                    <p>© ' . date('Y') . ' SERENDIB GREEN PLANTATION PVT LTD. All rights reserved.</p>
                     <p>This is an automated message. Please do not reply to this email.</p>
                     <p>For inquiries, contact: umesh@serendibgroups.com</p>
                 </div>

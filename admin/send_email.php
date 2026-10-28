@@ -1,6 +1,7 @@
 <?php
 require_once '../config.php';
 require_once '../db.php';
+require_once '../includes/application_helpers.php';
 
 
 // Start session
@@ -28,7 +29,7 @@ try {
     
     // Get all applications for dropdown
     $stmt = $db->prepare("
-        SELECT id, full_name, email, status, investment_type 
+        SELECT id, full_name, email, status, investment_type
         FROM investors 
         WHERE email IS NOT NULL AND email != ''
         ORDER BY full_name
@@ -42,12 +43,6 @@ try {
 
 $error = '';
 $success = '';
-
-function buildApplicationRef($applicationId, $investmentType) {
-    $planCode = strtoupper(trim((string)($investmentType ?? '')));
-    $planCodeSegment = $planCode !== '' ? ($planCode . '-') : '';
-    return $planCodeSegment . str_pad((int)$applicationId, 6, '0', STR_PAD_LEFT);
-}
 
 // Handle email sending
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -106,7 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 // Add signature
                 $body .= "\n\n<hr>\n<p style='color: #666; font-size: 12px;'>";
-                $body .= "EcoWealth Finance<br>";
+                $body .= "SERENDIB GREEN PLANTATION PVT LTD<br>";
                 $body .= "Email: support@ecowealth.com<br>";
                 $body .= "Phone: +94 11 234 5678<br>";
                 $body .= "This is an automated message. Please do not reply to this email.</p>";
@@ -189,7 +184,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Send Email | EcoWealth Admin</title>
+    <title>Send Email | SERENDIB GREEN PLANTATION PVT LTD Admin</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="assets/admin-style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/summernote/0.8.20/summernote-lite.min.css">
